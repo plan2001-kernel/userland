@@ -98,8 +98,8 @@ The static Linux executable is **not** uploaded as a Plan2001 deliverable. It is
 | Kernel ObjectSpace C-header host syntax | Executed |
 | BusyBox static link against Linux host libc | Executed as control |
 | BusyBox Linux host applet smoke | Executed as control |
-| BusyBox static link against Plan2001 libc | **NOT RUN: adapters not yet implemented** |
-| Plan2001 QEMU/OVMF BusyBox execution | **NOT RUN: no target BusyBox yet** |
+| BusyBox static link against Plan2001 libc | Native `true.c` diagnostic link; separate three-applet freestanding target workflow |
+| Plan2001 QEMU/OVMF BusyBox execution | Separate native `true.c` and three-applet guest smoke workflows (check each run) |
 | Physical hardware | **NOT RUN** |
 
 Host-control build logs and the test summary are available under the workflow run's **Artifacts** and **Step summary**. Failure of the host control is a real CI failure; success must not be advertised as target compatibility.
@@ -119,3 +119,7 @@ Changes needed in native kernel ABI belong to [kernel](https://github.com/plan20
 ## Dedicated libc audit workflow
 
 The separate [libc audit](libc-audit.md) runs in `.github/workflows/libc-audit.yml` using the same immutable source pins. It builds the actual native libc archive and startup objects, the Linux host-control BusyBox, and a native BusyBox `true.c` diagnostic link. It then computes a reproducible `nm` symbol-gap report and a manifest-versus-source check. The host and target outputs have deliberately separate statuses; a host success is not a Plan2001 multicall success. See the audit document for artifacts, local commands and limitations.
+
+## Native BusyBox subset and QEMU
+
+The separate [BusyBox native target guide](BUSYBOX-TARGET.md) documents the dedicated `.github/workflows/busybox-target.yml` job. It builds unmodified upstream `true.c`, `false.c`, and `echo.c` against the pinned Plan2001 libc with a small userland adapter, writes a native AMD64 static ELF, and executes those applets inside the real Plan2001 QEMU guest using a disposable GE/O image. A successful job publishes the executable in a `busybox-plan2001-amd64` artifact and guest serial evidence in `busybox-native-target-qemu`. This is not yet a complete POSIX or full upstream BusyBox port.

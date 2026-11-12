@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Build freestanding Plan2001 AMD64 BusyBox true/false/echo subset.
+
+Builds ORIGINAL pinned upstream applet sources unchanged with a small,
+explicitly scoped Plan2001 libbb/console adapter. This is not a complete
+BusyBox make-based port nor a POSIX compatibility certification.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+APPLETS = {"true": "coreutils/true.c", "false": "coreutils/false.c",
+           "echo": "coreutils/echo.c"}
+ROOT = Path(__file__).resolve().parents[2]
+PORT = ROOT / "ports" / "busybox"
+
+
+def logged(command: list[str], log: Path) -> None:
+    with log.open("a", encoding="utf-8") as stream:
+        stream.write("$ " + shlex.join(map(str, command)) + "\n")
+        stream.flush()
+        p = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT)
+    if p.returncode:
+        print("\n".join(log.read_text(errors="replace").splitlines()[-100:]),
+              file=sys.stderr)
+        raise RuntimeError(f"target command failed (exit {p.returncode}): "
+                           f"{shlex.join(map(str, command))}")
+
+
+def read(cmd: list[str]) -> str:
+    return subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT)
+
+
+def check_elf(elf: Path, reports: Path, title: str) -> dict:
+    header = read(["readelf", "-hW", str(elf)])
+    phdr = read(["readelf", "-lW", str(elf)])
+    dynamic = read(["readelf", "-dW", str(elf)])
+    nm = read(["nm", str(elf)])
+    undef = read(["nm", "-u", str(elf)]).strip()
+    if not re.search(r"Type:\s+EXEC", header):
+        raise RuntimeError(f"{title}: ELF must be ET_EXEC")
+    if "Advanced Micro Devices X86-64" not in header:
+        raise RuntimeError(f"{title}: expected AMD64")
+    if "INTERP" in phdr or "DYNAMIC" in phdr or "(NEEDED)" in dynamic:
+        raise RuntimeError(f"{title}: unexpected dynamic loader/dependency")
+    if undef:
+        raise RuntimeError(f"{title}: undefined symbols: {undef[:500]}")
+    loads = re.findall(r"(?m)^\s*LOAD\s+", phdr)
+    if len(loads) != 2:
+        raise RuntimeError(f"{title}: expected two PT_LOAD, found {len(loads)}")
+    for sym in ("_start", "p9_start", "plan2001_busybox_dispatch",
+                "true_main", "false_main", "echo_main", "full_write",
+                "obj_write"):
+        if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
+            raise RuntimeError(f"{title}: missing symbol {sym}")
+    (reports / f"{title}.readelf.txt").write_text(
+        header + "\n" + phdr + "\n" + dynamic
+        + "\nUNDEFINED SYMBOLS:\n" + (undef or "(none)") + "\n",
+        encoding="utf-8")
+    data = elf.read_bytes()
+    return {"file": str(elf), "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "arch": "AMD64", "type": "ET_EXEC",
+            "pt_load": len(loads), "undefined_symbols": 0,
+            "dynamic_interpreter": False, "linked_applets": list(APPLETS)}
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--kernel", type=Path, required=True)
+    ap.add_argument("--busybox", type=Path, required=True)
+    ap.add_argument("--reports", type=Path, required=True)
+    ap.add_argument("--cc", default="gcc-14")
+    args = ap.parse_args()
+    args.reports.mkdir(parents=True, exist_ok=True)
+    build = args.reports / "busybox-target"
+    build.mkdir(parents=True, exist_ok=True)
+    log = args.reports / "busybox-target-build.log"
+    report = args.reports / "busybox-target-build.md"
+    runtime = args.kernel / "build/gcc/mpy/mpyobj"
+    archive = args.kernel / "build/gcc/mpy/lib/libc-user.a"
+    linker = args.kernel / "micropython/gcc/user.ld"
+    originals = [args.busybox / path for path in APPLETS.values()]
+    inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c",
+              PORT / "main.c", runtime / "rt_startup.o",
+              runtime / "rt_start.o", runtime / "rt_stubs.o",
+              runtime / "rt_misc.o", runtime / "libm_frexp.o",
+              runtime / "libm_ldexp.o", runtime / "libm_scalbn.o", *originals]
+    absent = [str(p) for p in inputs if not p.is_file()]
+    if absent:
+        raise SystemExit("Missing pinned input(s): " + ", ".join(absent))
+
+    common = [args.cc, "-std=gnu11", "-m64", "-O2", "-ffreestanding",
+              "-nostdinc", "-fno-builtin", "-fno-stack-protector",
+              "-fno-pie", "-fno-pic", "-fno-strict-aliasing",
+              "-fno-asynchronous-unwind-tables", "-fno-unwind-tables",
+              "-fno-omit-frame-pointer", "-ffunction-sections",
+              "-fdata-sections", "-Wall", "-Wextra", "-Werror",
+              "-I", str(PORT), "-I", str(args.kernel / "runtime/abi")]
+
+    objects = []
+    info = {"kernel_commit": read(
+        ["git", "-C", str(args.kernel), "rev-parse", "HEAD"]).strip(),
+        "busybox_commit": read(
+            ["git", "-C", str(args.busybox), "rev-parse", "HEAD"]).strip(),
+        "applet_sources": list(APPLETS.values()),
+        "native_compiler": read([args.cc, "--version"]).splitlines()[0],
+        "libc": str(archive),
+        "method": "gcc freestanding native-appcompat applet-subset",
+        "full_upstream_busybox_make": "NOT RUN",
+        "linux_host_libc_used_for_target": False,
+        "qemu_result": "NOT ASSESSED by build script"}
+    try:
+        for name, source in {**APPLETS, "compat": str(PORT / "compat.c")}.items():
+            path = (args.busybox / source if name in APPLETS else Path(source))
+            obj = build / f"{name}.o"
+            logged(common + ["-c", str(path), "-o", str(obj)], log)
+            objects.append(obj)
+
+        for label, smoke in (("busybox-plan2001", False),
+                             ("busybox-smoke-plan2001", True)):
+            launcher = build / ("main-smoke.o" if smoke else "main.o")
+            flags = (["-DPLAN2001_BUSYBOX_GUEST_SMOKE=1"] if smoke else [])
+            logged(common + flags + ["-c", str(PORT / "main.c"),
+                                     "-o", str(launcher)], log)
+            elf = build / (label + ".elf")
+            link = [
+                args.cc, "-nostdlib", "-nostartfiles", "-static", "-no-pie",
+                "-Wl,-T," + str(linker), "-Wl,-e,_start",
+                "-Wl,--no-dynamic-linker", "-Wl,-z,noexecstack",
+                "-Wl,--gc-sections", "-Wl,--build-id=none",
+                "-o", str(elf), str(runtime / "rt_startup.o"),
+                str(runtime / "rt_start.o"), str(runtime / "rt_misc.o"),
+                str(launcher),
+                *map(str, objects), str(runtime / "rt_stubs.o"),
+                str(runtime / "libm_frexp.o"),
+                str(runtime / "libm_ldexp.o"),
+                str(runtime / "libm_scalbn.o"),
+                str(archive), "-lgcc",
+            ]
+            logged(link, log)
+            info[label] = check_elf(elf, args.reports, label)
+
+        (args.reports / "busybox-target-build.json").write_text(
+            json.dumps(info, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8")
+        report.write_text(
+            "# BusyBox native AMD64 build\n\n"
+            "- **PASS:** upstream BusyBox 1.36.1 `true.c`, `false.c`, "
+            "and `echo.c` compiled unchanged with freestanding GCC.\n"
+            "- **PASS:** linked a limited Plan2001 native multicall ELF "
+            "and a separate guest-smoke ELF using only native libc, "
+            "native startup/syscalls and libgcc.\n"
+            "- **PASS:** static AMD64 ELF checks, no dynamic interpreter, "
+            "no undefined symbols and exactly two PT_LOAD segments.\n"
+            "- **NOT RUN:** complete upstream BusyBox Makefile/libbb port, "
+            "full POSIX semantics or all BusyBox applets.\n"
+            "- **NOT RUN here:** QEMU guest execution (separate step).\n"
+            "\nTwo target ELF images are stored in the **runner scratch "
+            "build tree** and are not shipped as Linux binaries. The "
+            "source files and BSD/GPL provenance remain pinned.\n",
+            encoding="utf-8")
+        print("Native freestanding BusyBox true/false/echo subset: "
+              "static ET_EXEC link PASS", flush=True)
+    except Exception as exc:
+        report.write_text(
+            "# BusyBox native AMD64 build\n\n"
+            f"**FAIL:** {type(exc).__name__}: {exc}\n"
+            "QEMU guest execution: **NOT RUN**.\n",
+            encoding="utf-8")
+        raise
+
+
+if __name__ == "__main__":
+    main()

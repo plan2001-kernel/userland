@@ -2,7 +2,7 @@
 
 A small Unix-like userspace built on the experimental [Plan2001 kernel](https://github.com/plan2001-kernel/kernel).
 
-**Status:** Design and porting plan. No BusyBox port or POSIX layer is implemented yet.
+**Status:** CI dependency fetch, native ABI inventory and Linux-host BusyBox static control are implemented. **No BusyBox port to Plan2001 or POSIX layer is implemented yet.**
 
 ## Goal
 
@@ -28,9 +28,11 @@ Static linking means the necessary C runtime functions are included inside the e
 
 The familiar `/bin`, `/usr`, `/etc`, and `/tmp` directories are userland projections of ObjectSpace bindings, **not kernel directories**. Multiple bindings can refer to one BusyBox executable GE/O object; an applet launcher must preserve the requested `argv[0]`.
 
-## First experiment
+## Build and CI workspace
 
-On a Debian development host, inspect the existing kernel `runtime/libc`, select a tiny BusyBox configuration, and attempt compilation and static linking without Debian's libc. Inventory missing C and POSIX interfaces and check ELF startup and dependencies. Successful linking is not evidence of working execution under Plan2001; verify the result in the real Plan2001 kernel with QEMU.
+The [build mechanism](docs/BUILD.md) pins the external kernel and BusyBox sources in [`config/sources.json`](config/sources.json). GitHub Actions fetches each as a **sibling source tree** outside the userland repo, verifies the exact commits, inspects the kernel's `runtime/libc` and native ABI, and builds a minimal **Linux-host static BusyBox control** (`true`, `false`, `echo`). That control is intentionally linked against the Linux runner's libc and is **not** a Plan2001 program.
+
+The next implementation objective is to compile and statically link BusyBox **against Plan2001's own runtime without Linux libc**, then execute it under the real Plan2001 kernel in QEMU. Current CI must report these target tests **NOT RUN** until implemented.
 
 ## Milestones (proposed)
 
@@ -42,6 +44,8 @@ On a Debian development host, inspect the existing kernel `runtime/libc`, select
 
 ## Documentation
 
+- [Build mechanism and local Debian commands](docs/BUILD.md)
+- [GitHub Actions build workflow](.github/workflows/build.yml)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Minimal POSIX profile](docs/POSIX-PROFILE.md)
 - [BusyBox porting plan](docs/PORTING.md)

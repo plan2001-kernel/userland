@@ -74,7 +74,7 @@ jobs:
           CC: gcc-14
         working-directory: ${{ runner.temp }}/plan2001-sources/kernel
         run: |
-          tools/qemu-o-boot.sh --no-build --accel kvm:tcg \
+          bash tools/qemu-o-boot.sh --no-build --accel kvm:tcg \
             --timeout 180 \
             --output-dir "${{ runner.temp }}/plan2001-reports/qemu"
 

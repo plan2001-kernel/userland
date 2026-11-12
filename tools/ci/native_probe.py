@@ -60,7 +60,7 @@ def main():
     shim.write_text(
         "/* Minimal BusyBox true.c diagnostic header, NOT the complete libbb. */\n"
         "#ifndef PLAN2001_MINI_LIBBB_H\n#define PLAN2001_MINI_LIBBB_H\n"
-        "#define MAIN_EXTERNALLY_VISIBLE __attribute__((visibility(\"default\"))\n"
+        "#define MAIN_EXTERNALLY_VISIBLE __attribute__((visibility(\"default\")))\n"
         "#define UNUSED_PARAM __attribute__((unused))\n"
         "#define EXIT_SUCCESS 0\n"
         "#endif\n",

@@ -90,7 +90,9 @@ def main() -> None:
     originals = [args.busybox / path for path in APPLETS.values()]
     inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c",
               PORT / "main.c", runtime / "rt_startup.o",
-              runtime / "rt_start.o", runtime / "rt_stubs.o", *originals]
+              runtime / "rt_start.o", runtime / "rt_stubs.o",
+              runtime / "rt_misc.o", runtime / "libm_frexp.o",
+              runtime / "libm_ldexp.o", runtime / "libm_scalbn.o", *originals]
     absent = [str(p) for p in inputs if not p.is_file()]
     if absent:
         raise SystemExit("Missing pinned input(s): " + ", ".join(absent))
@@ -135,8 +137,12 @@ def main() -> None:
                 "-Wl,--no-dynamic-linker", "-Wl,-z,noexecstack",
                 "-Wl,--gc-sections", "-Wl,--build-id=none",
                 "-o", str(elf), str(runtime / "rt_startup.o"),
-                str(runtime / "rt_start.o"), str(launcher),
+                str(runtime / "rt_start.o"), str(runtime / "rt_misc.o"),
+                str(launcher),
                 *map(str, objects), str(runtime / "rt_stubs.o"),
+                str(runtime / "libm_frexp.o"),
+                str(runtime / "libm_ldexp.o"),
+                str(runtime / "libm_scalbn.o"),
                 str(archive), "-lgcc",
             ]
             logged(link, log)

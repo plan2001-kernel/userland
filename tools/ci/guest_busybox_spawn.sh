@@ -55,8 +55,8 @@ cat >"$REPORTS/busybox-spawn-guest.md" <<'EOF'
 
 - **PASS:** Boot executable is the native MicroPython ELF at OID 0x4f45584543000003, not a BusyBox smoke harness.
 - **PASS:** The normal three-applet BusyBox ELF is separately installed at GE/O OID 0x4f45584543000005 with SHA-256 verification.
-- **PASS:** MicroPython space.spawn(oid, argv=...) creates a new process and plan9.process_wait(process_handle, 30000) observes normal exit.
-- **PASS:** Original BusyBox echo.c writes to the native console; true returns success and false returns failure status.
+- **PASS:** MicroPython space.spawn(oid, argv=..., vhandles=[(region, 256)]) creates a new process with an explicit writable output capability; plan9.process_wait(process_handle, 30000) observes normal exit.
+- **PASS:** Original BusyBox echo.c publishes stdout into an explicitly delegated writable region; the MicroPython parent reads it RO and forwards it through its authorized console. True returns success and false returns failure status.
 - **PASS:** MicroPython init.run() returns zero after all child-process assertions.
 - **LIMITATION:** Three-applet native BusyBox subset, not the full BusyBox or a POSIX fd layer.
 - **NOT RUN:** Physical hardware, full shell, full BusyBox.

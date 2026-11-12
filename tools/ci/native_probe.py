@@ -108,7 +108,8 @@ int main(int argc, char **argv)
     try:
         run_logged(common + ["-I", str(build), "-c",
                              str(args.busybox / "coreutils/true.c"), "-o", str(true_obj)], log)
-        run_logged(common + ["-I", str(args.kernel / "runtime/abi"),\n                             "-c", str(driver), "-o", str(main_obj)], log)
+        run_logged(common + ["-I", str(args.kernel / "runtime/abi"),
+                             "-c", str(driver), "-o", str(main_obj)], log)
 
         elf = build / "busybox-true-plan2001.elf"
         run_logged(

@@ -1,6 +1,6 @@
 # Reproducible build and test workspace
 
-This is the **working source/build mechanism** for the Plan2001 userland project. It is not yet a complete Plan2001 BusyBox port. The workflow's currently executable output is a **statically linked Linux-host reference BusyBox** and an audit of native kernel dependencies.
+This is the **working source/build mechanism** for the Plan2001 userland project. It is not yet a complete Plan2001 BusyBox port. The host-control workflow produces a **statically linked Linux-host reference BusyBox**. A separate [libc ABI audit](libc-audit.md) builds the native libc archive and links the upstream BusyBox `true.c` applet as a diagnostic, without claiming a multicall port.
 
 ## Separation of repositories
 
@@ -115,3 +115,7 @@ Once the missing compatibility interfaces have been audited and implemented:
 5. Only after the guest test passes add persistent ObjectSpace paths, shell pipes and wider POSIX functionality. Treat ARM64 as a separate future port.
 
 Changes needed in native kernel ABI belong to [kernel](https://github.com/plan2001-kernel/kernel), with a separately reviewed PR. Do not introduce POSIX path syscalls into the kernel to satisfy this userspace goal.
+
+## Dedicated libc audit workflow
+
+The separate [libc audit](libc-audit.md) runs in `.github/workflows/libc-audit.yml` using the same immutable source pins. It builds the actual native libc archive and startup objects, the Linux host-control BusyBox, and a native BusyBox `true.c` diagnostic link. It then computes a reproducible `nm` symbol-gap report and a manifest-versus-source check. The host and target outputs have deliberately separate statuses; a host success is not a Plan2001 multicall success. See the audit document for artifacts, local commands and limitations.

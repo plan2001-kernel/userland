@@ -24,6 +24,7 @@ QOB_OUT="$OUT"
 QOB_ACCEL=kvm:tcg
 QOB_TIMEOUT=180
 QOB_NO_REPL=1
+QOB_INI_BOOTEXEC=0x4f45584543000003
 QOB_BUILD=never
 qob_prepare_outdir
 qob_preflight

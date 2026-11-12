@@ -74,6 +74,7 @@ extern int true_main(int, char **);
 extern long obj_open(unsigned long long, void *, long, unsigned long long, ObjId *);
 extern long obj_write(int, void *, unsigned long long, unsigned long long);
 extern long obj_close(int);
+extern long sleep(long);
 
 static char marker[] = "PLAN2001-USERLAND-BUSYBOX-TRUE-EXECUTED";
 
@@ -93,6 +94,9 @@ int main(int argc, char **argv)
     if (obj_write(h, marker, sizeof(marker)-1, 0) != sizeof(marker)-1)
         return 13;
     obj_close(h);
+    /* The kernel treats boot-owner process termination as fatal. */
+    /* Keep this diagnostic boot-owner alive after true_main succeeded. */
+    for (;;) (void)sleep(1000);
     return 0;
 }
 """, encoding="utf-8")

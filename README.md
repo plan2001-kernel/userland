@@ -2,7 +2,7 @@
 
 A small Unix-like userspace built on the experimental [Plan2001 kernel](https://github.com/plan2001-kernel/kernel).
 
-**Status:** CI dependency fetch, native ABI inventory and Linux-host BusyBox static control are implemented. **No BusyBox port to Plan2001 or POSIX layer is implemented yet.**
+**Status:** Pinned source CI and Linux-host BusyBox control work. A native single-applet BusyBox `true.c` diagnostic link is implemented, but a full BusyBox multicall port and POSIX layer are not. The separate libc audit workflow reports the remaining symbol-level candidates.
 
 ## Goal
 
@@ -32,7 +32,7 @@ The familiar `/bin`, `/usr`, `/etc`, and `/tmp` directories are userland project
 
 The [build mechanism](docs/BUILD.md) pins the external kernel and BusyBox sources in [`config/sources.json`](config/sources.json). GitHub Actions fetches each as a **sibling source tree** outside the userland repo, verifies the exact commits, inspects the kernel's `runtime/libc` and native ABI, and builds a minimal **Linux-host static BusyBox control** (`true`, `false`, `echo`). That control is intentionally linked against the Linux runner's libc and is **not** a Plan2001 program.
 
-The next implementation objective is to compile and statically link BusyBox **against Plan2001's own runtime without Linux libc**, then execute it under the real Plan2001 kernel in QEMU. Current CI must report these target tests **NOT RUN** until implemented.
+The native diagnostic workflow links the upstream BusyBox `true.c` applet (not the full multicall binary) against the actual Plan2001 runtime and runs separate guest checks. The dedicated [libc ABI audit](docs/libc-audit.md) compares host-compiled BusyBox object references with native library exports. These checks are not evidence of complete POSIX compatibility.
 
 ## Milestones (proposed)
 
@@ -45,6 +45,7 @@ The next implementation objective is to compile and statically link BusyBox **ag
 ## Documentation
 
 - [Build mechanism and local Debian commands](docs/BUILD.md)
+- [GitHub Actions libc ABI audit and evidence](docs/libc-audit.md)
 - [GitHub Actions build workflow](.github/workflows/build.yml)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Minimal POSIX profile](docs/POSIX-PROFILE.md)

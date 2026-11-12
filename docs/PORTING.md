@@ -1,6 +1,6 @@
 # Debian-first BusyBox compilation experiment
 
-**Planned test. Not yet executed.**
+**Current baseline:** CI source pin verification, kernel ABI/libc inventory and static Linux-host BusyBox control are implemented. A target BusyBox/Plan2001 libc link and QEMU execution are **NOT RUN**. See [build mechanism](BUILD.md).
 
 ## Goal
 
@@ -10,8 +10,10 @@ Discover whether a tiny BusyBox configuration can compile and statically link ag
 
 * Kernel project: [plan2001-kernel/kernel](https://github.com/plan2001-kernel/kernel)
 * Inspect `runtime/libc/port`, `runtime/libc/9sys`, `runtime/abi` and the actual kernel user-program build/startup/linker sources.
-* BusyBox upstream: https://busybox.net/ . Pin an exact release and checksum before implementing a reproducible build.
+* BusyBox upstream: https://busybox.net/ . The initial mirror source revision (BusyBox 1.36.1) and exact SHA are pinned in [`config/sources.json`](../config/sources.json). Record origin and licensing for subsequent revisions.
 * Initial target: Plan2001 AMD64 userspace ELF. ARM64 target support must be verified separately.
+
+The automated baseline in [GitHub Actions](../.github/workflows/build.yml) builds **only a Linux-host BusyBox static control** with `CONFIG_STATIC`, `CONFIG_TRUE`, `CONFIG_FALSE`, and `CONFIG_ECHO` enabled. Its success does not imply a Plan2001 target ELF. The native Plan2001 runtime compilation/link described below is **future implementation work**.
 
 ## Stage A: compile and dependency inventory on Debian
 

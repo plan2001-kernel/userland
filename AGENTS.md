@@ -2,7 +2,7 @@
 
 This repository implements a familiar Unix-facing userspace **over** Plan2001. It does not define the kernel's native architecture.
 
-Read `README.md`, `docs/ARCHITECTURE.md`, `docs/POSIX-PROFILE.md`, and `docs/PORTING.md`. For current native ABI consult [kernel architecture](https://github.com/plan2001-kernel/kernel/blob/main/docs/ARCHITECTURE.md), [ObjectSpace](https://github.com/plan2001-kernel/kernel/blob/main/docs/OBJECTSPACE.md), and [kernel interface](https://github.com/plan2001-kernel/kernel/blob/main/docs/KERNEL-INTERFACE.md).
+Read `README.md`, `docs/ARCHITECTURE.md`, `docs/POSIX-PROFILE.md`, and `docs/PORTING.md`, and `docs/BUILD.md`. For current native ABI consult [kernel architecture](https://github.com/plan2001-kernel/kernel/blob/main/docs/ARCHITECTURE.md), [ObjectSpace](https://github.com/plan2001-kernel/kernel/blob/main/docs/OBJECTSPACE.md), and [kernel interface](https://github.com/plan2001-kernel/kernel/blob/main/docs/KERNEL-INTERFACE.md).
 
 ## Rules
 
@@ -16,5 +16,7 @@ Read `README.md`, `docs/ARCHITECTURE.md`, `docs/POSIX-PROFILE.md`, and `docs/POR
 8. Never silently reformat GE/O volumes.
 9. Use English for agent tasks and code-facing docs. Make bounded PRs and do not merge without explicit authorization.
 10. State exact tests run, their results and **NOT RUN** limitations. Compilation is not runtime evidence.
+11. Use [`config/sources.json`](config/sources.json) as the sole source for immutable external kernel and BusyBox commits. Never silently update them or vendor the kernel into userland.
+12. The current CI builds a Linux-host static BusyBox **control**, not a Plan2001 ELF. A successful host check must never be presented as successful Plan2001 libc linkage or QEMU boot.
 
 **First implementation task:** audit a deliberately minimal BusyBox compile/link on Debian against Plan2001's current ABI and C runtime.

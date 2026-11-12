@@ -2,7 +2,7 @@
 
 A small Unix-like userspace built on the experimental [Plan2001 kernel](https://github.com/plan2001-kernel/kernel).
 
-**Status:** Pinned source CI and Linux-host BusyBox control work. A native single-applet BusyBox `true.c` diagnostic link is implemented, but a full BusyBox multicall port and POSIX layer are not. The separate libc audit workflow reports the remaining symbol-level candidates.
+**Status:** Pinned source CI and libc symbol audit are implemented. A new first-stage native target workflow builds original BusyBox `true`/`false`/`echo` applets with Plan2001's own libc and tests them on the real kernel in QEMU. This is a **limited subset launcher**, not the complete upstream BusyBox multicall port or POSIX layer.
 
 ## Goal
 
@@ -46,6 +46,7 @@ The native diagnostic workflow links the upstream BusyBox `true.c` applet (not t
 
 - [Build mechanism and local Debian commands](docs/BUILD.md)
 - [GitHub Actions libc ABI audit and evidence](docs/libc-audit.md)
+- [Native BusyBox target subset build and QEMU smoke test](docs/BUSYBOX-TARGET.md)
 - [GitHub Actions build workflow](.github/workflows/build.yml)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Minimal POSIX profile](docs/POSIX-PROFILE.md)

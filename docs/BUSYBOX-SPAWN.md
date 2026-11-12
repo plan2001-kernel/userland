@@ -64,8 +64,10 @@ try:
     assert result[2] == plan9.OBJ_PROC_CAUSE_EXIT
     assert result[1] == ""
     frame = plan9.region_read(view, 4096)
-    assert not any(frame[i] for i in range(1, 8))
-    n = frame[0]
+    n = 0
+    for i in range(8):
+        n |= frame[i] << (8 * i)
+    assert n <= 4088
     print(frame[8:8+n].decode(), end="")
 finally:
     if child is not None:

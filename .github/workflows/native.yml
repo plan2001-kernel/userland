@@ -75,7 +75,7 @@ jobs:
         working-directory: ${{ runner.temp }}/plan2001-sources/kernel
         run: |
           bash tools/qemu-o-boot.sh --no-build --accel kvm:tcg \
-            --timeout 180 \
+            --timeout 180 --obootexec 0x4f45584543000003 \
             --output-dir "${{ runner.temp }}/plan2001-reports/qemu"
 
       - name: Boot the native BusyBox true applet in Plan2001 QEMU

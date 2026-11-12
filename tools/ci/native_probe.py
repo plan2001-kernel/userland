@@ -67,12 +67,35 @@ def main():
         encoding="utf-8",
     )
     driver = build / "main.c"
-    driver.write_text(
-        "/* Native startup calls main(), which calls the real BusyBox true applet. */\n"
-        "extern int true_main(int, char **);\n"
-        "int main(int argc, char **argv) { return true_main(argc, argv); }\n",
-        encoding="utf-8",
-    )
+    driver.write_text("""\
+/* Test driver, not an upstream BusyBox source modification. */
+#include "obj.h"
+extern int true_main(int, char **);
+extern long obj_open(unsigned long long, void *, long, unsigned long long, ObjId *);
+extern long obj_write(int, void *, unsigned long long, unsigned long long);
+extern long obj_close(int);
+
+static char marker[] = "PLAN2001-USERLAND-BUSYBOX-TRUE-EXECUTED";
+
+int main(int argc, char **argv)
+{
+    ObjOpenConsoleReq req = { 2, 0 };
+    int h;
+    if (true_main(argc, argv) != 0)
+        return 11;
+    h = (int)obj_open(ObjOpenConsole, &req, sizeof(req), 0, 0);
+    if (h < 0) {
+        req.stream = 1;
+        h = (int)obj_open(ObjOpenConsole, &req, sizeof(req), 0, 0);
+    }
+    if (h < 0)
+        return 12;
+    if (obj_write(h, marker, sizeof(marker)-1, 0) != sizeof(marker)-1)
+        return 13;
+    obj_close(h);
+    return 0;
+}
+""", encoding="utf-8")
     common = [
         args.cc, "-std=gnu11", "-m64", "-O2", "-ffreestanding",
         "-fno-builtin", "-fno-stack-protector", "-fno-pie", "-fno-pic",
@@ -85,7 +108,7 @@ def main():
     try:
         run_logged(common + ["-I", str(build), "-c",
                              str(args.busybox / "coreutils/true.c"), "-o", str(true_obj)], log)
-        run_logged(common + ["-c", str(driver), "-o", str(main_obj)], log)
+        run_logged(common + ["-I", str(args.kernel / "runtime/abi"),\n                             "-c", str(driver), "-o", str(main_obj)], log)
 
         elf = build / "busybox-true-plan2001.elf"
         run_logged(

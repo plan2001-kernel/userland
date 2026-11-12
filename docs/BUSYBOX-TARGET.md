@@ -89,9 +89,11 @@ The fixture holds the boot-owner alive after the test because ordinary
 shell-like program exit is not yet implemented for the boot-owner. This
 does **not** test process completion or launching a second program.
 
-On each CI run, use the job summary and `busybox-native-target-qemu`
-artifact for the actual PASS/FAIL status, JSON ELF hashes, link diagnostics
-and serial boot logs. A passing compiler job alone is **not** guest evidence.
+On each successful CI run, the `busybox-plan2001-amd64` artifact contains
+`busybox-plan2001.elf` (the actual native three-applet executable).
+The separate `busybox-native-target-qemu` artifact contains JSON ELF hashes,
+link diagnostics, and guest serial logs. Always use the run's real
+PASS/FAIL status and job summary as evidence. A passing compiler job alone is **not** guest evidence.
 This workflow does not run full BusyBox `make`, native `sh`, filesystem
 POSIX adapters, broad applets or hardware.
 

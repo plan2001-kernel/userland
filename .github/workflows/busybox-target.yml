@@ -80,6 +80,14 @@ jobs:
             "${{ runner.temp }}/plan2001-reports/busybox-target/busybox-smoke-plan2001.elf" \
             "${{ runner.temp }}/plan2001-reports"
 
+      - name: Publish runnable native BusyBox subset ELF
+        uses: actions/upload-artifact@v4
+        with:
+          name: busybox-plan2001-amd64
+          path: ${{ runner.temp }}/plan2001-reports/busybox-target/busybox-plan2001.elf
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Publish build and guest-test result
         if: always()
         shell: bash

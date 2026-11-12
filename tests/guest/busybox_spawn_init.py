@@ -41,9 +41,11 @@ def busybox(*argv):
             raise RuntimeError("BusyBox child did not exit normally")
 
         frame = plan9.region_read(view, 4096)
-        if any(frame[i] != 0 for i in range(1, 8)):
+        n = 0
+        for i in range(8):
+            n |= frame[i] << (8 * i)
+        if n > 4088:
             raise RuntimeError("stdout region length out of bounds")
-        n = frame[0]
         if n > 0:
             print(frame[8:8+n].decode(), end="")
         return 0 if state[1] == "" else 1

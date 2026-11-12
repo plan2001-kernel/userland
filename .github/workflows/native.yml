@@ -78,6 +78,13 @@ jobs:
             --timeout 180 \
             --output-dir "${{ runner.temp }}/plan2001-reports/qemu"
 
+      - name: Boot the native BusyBox true applet in Plan2001 QEMU
+        run: |
+          bash tools/ci/guest_true.sh \
+            "${{ runner.temp }}/plan2001-sources/kernel" \
+            "${{ runner.temp }}/plan2001-reports/native-true/busybox-true-plan2001.elf" \
+            "${{ runner.temp }}/plan2001-reports"
+
       - name: Summarize native tests without overstating guest applet coverage
         if: always()
         shell: bash
@@ -102,7 +109,12 @@ jobs:
               echo 'QEMU boot: **NOT COMPLETED**.'
             fi
             echo
-            echo '**NOT RUN:** BusyBox applet execution in Plan2001 QEMU, full BusyBox multicall link, physical hardware.'
+            if [ -f "${{ runner.temp }}/plan2001-reports/busybox-true-guest.md" ]; then
+              cat "${{ runner.temp }}/plan2001-reports/busybox-true-guest.md"
+            else
+              echo 'BusyBox true guest run: **NOT COMPLETED**.'
+            fi
+            echo '**NOT RUN:** full BusyBox multicall link, POSIX compatibility, physical hardware.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload native link and QEMU logs (never disk images)
@@ -118,5 +130,7 @@ jobs:
             ${{ runner.temp }}/plan2001-reports/qemu/*.log
             ${{ runner.temp }}/plan2001-reports/qemu/report.txt
             ${{ runner.temp }}/plan2001-reports/qemu/ream/*.log
+            ${{ runner.temp }}/plan2001-reports/qemu-busybox-true/*.log
+            ${{ runner.temp }}/plan2001-reports/qemu-busybox-true/*.json
           if-no-files-found: warn
           retention-days: 14

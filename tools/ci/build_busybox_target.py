@@ -63,7 +63,7 @@ def check_elf(elf: Path, reports: Path, title: str) -> dict:
     if title == "busybox-f5-plan2001":
         for sym in ("full_read", "p2001_session_read", "p2001_session_write",
                     "region_wait", "region_wake"):
-            if not re.search(rf"(?m)^[0-9a-f]+\\s+[Tt]\\s+{re.escape(sym)}$", nm):
+            if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
                 raise RuntimeError(f"{title}: missing console symbol {sym}")
     (reports / f"{title}.readelf.txt").write_text(
         header + "\n" + phdr + "\n" + dynamic

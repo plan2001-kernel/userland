@@ -74,3 +74,12 @@ table, pipes, termios, job control, filesystem hierarchy or full `libbb`.
 The read loop is *not* presented as an upstream shell applet. It proves
 that the BusyBox-bearing native ELF can output to and read from F5 using
 real kernel-granted console regions. Physical hardware is NOT RUN.
+
+## Stage-2 PVD extension
+
+The phase-2 F5 launcher additionally constructs a **process-local memory-only**
+Unix directory projection with a bounded PVD. Its small pwd/cd/ls builtins
+are tested in the same genuine PS/2 keyboard and VGA QEMU acceptance. No
+native ObjectSpace/GE/O Handle is created from a directory name. See
+[UNIX-PVD.md](UNIX-PVD.md) for semantics and limits. The F5 launcher is
+still not BusyBox ash, and unix-init and persistent paths are still absent.

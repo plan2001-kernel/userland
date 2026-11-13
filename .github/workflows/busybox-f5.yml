@@ -1,4 +1,4 @@
-name: BusyBox F5 console (kernel latest main / real VGA QEMU)
+name: BusyBox F5 console + userspace PVD (kernel latest main / real VGA QEMU)
 
 on:
   pull_request:
@@ -6,14 +6,19 @@ on:
       - '.github/workflows/busybox-f5.yml'
       - 'config/sources.json'
       - 'ports/busybox/**'
+      - 'ports/unix/**'
+      - 'tests/host/**'
       - 'tools/ci/**'
       - 'docs/BUSYBOX-F5.md'
+      - 'docs/UNIX-PVD.md'
   push:
     branches: [main]
     paths:
       - '.github/workflows/busybox-f5.yml'
       - 'config/sources.json'
       - 'ports/busybox/**'
+      - 'ports/unix/**'
+      - 'tests/host/**'
       - 'tools/ci/**'
   workflow_dispatch:
   schedule:
@@ -41,6 +46,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential gcc-14 binutils clang lld file mtools ovmf \
             qemu-system-x86 python3 python3-pil
+
+      - name: Test host PVD path traversal and F5 builtins (ASan/UBSan)
+        run: bash tools/ci/test_pvd.sh
 
       - name: Resolve latest kernel main once, and verify BusyBox source SHA
         run: |
@@ -75,7 +83,7 @@ jobs:
             --image "${{ runner.temp }}/plan2001-reports/busybox-f5-o.img" \
             --reports "${{ runner.temp }}/plan2001-reports"
 
-      - name: Verify input and output on real F5 VGA using PS/2 keyboard in QEMU
+      - name: Verify F5 console and PVD pwd/cd/ls on real VGA using PS/2 keyboard in QEMU
         run: |
           bash tools/ci/guest_busybox_f5.sh \
             "${{ runner.temp }}/plan2001-sources/kernel" \
@@ -93,7 +101,7 @@ jobs:
               printf '\n**NOT COMPLETED:** %s\n' "$report" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
-          echo 'NOT RUN: BusyBox sh, full POSIX tty, hardware.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'NOT RUN: Unix init, GE/O persistence, BusyBox ash/sh, full POSIX tty, hardware.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload native F5 guest proof (no disk images)
         if: always()

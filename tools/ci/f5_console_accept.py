@@ -72,6 +72,13 @@ def focus(number):
     time.sleep(0.4)
 
 
+def enter(line):
+    specials = {" ": "spc", "/": "slash", ".": "dot"}
+    for letter in line:
+        key(specials.get(letter, letter))
+    key("ret")
+
+
 def screen(label):
     file = out / f"{label}.ppm"
     command(f"screendump {file}")
@@ -127,6 +134,25 @@ try:
     focus(5)
     restored = waitscreen("f5-restored", "PLAN2001-BUSYBOX-F5-READ:hello")
     assert "busybox>" in restored
-    print("PASS: real BusyBox upstream echo output + F5 PS/2 stdin + isolated VGA history")
+    # Stage 2: the same process now accepts an actual in-memory Unix view.
+    assert "PLAN2001-PVD-READY" in restored
+    enter("pwd")
+    waitscreen("pvd-pwd-root", "\n/\nbusybox>")
+    enter("ls")
+    waitscreen("pvd-ls-root", "\nbin\ndev\netc\nhome\ntmp\nusr\nvar\n")
+    enter("cd /usr/bin")
+    enter("pwd")
+    waitscreen("pvd-pwd-bin", "\n/usr/bin\nbusybox>")
+    enter("cd ..")
+    enter("pwd")
+    waitscreen("pvd-pwd-usr", "\n/usr\nbusybox>")
+    enter("cd /missing")
+    waitscreen("pvd-missing", "cd: no such directory")
+    enter("pwd")
+    waitscreen("pvd-cwd-unchanged", "\n/usr\nbusybox>")
+    enter("cd ../../../../")
+    enter("pwd")
+    waitscreen("pvd-root-confined", "\n/\nbusybox>")
+    print("PASS: native PVD pwd/cd/ls through real F5 PS/2 and VGA, errors and root confinement")
 finally:
     sock.close()

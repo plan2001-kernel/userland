@@ -20,6 +20,7 @@ APPLETS = {"true": "coreutils/true.c", "false": "coreutils/false.c",
            "echo": "coreutils/echo.c"}
 ROOT = Path(__file__).resolve().parents[2]
 PORT = ROOT / "ports" / "busybox"
+UNIX = ROOT / "ports" / "unix"
 
 
 def logged(command: list[str], log: Path) -> None:
@@ -62,7 +63,9 @@ def check_elf(elf: Path, reports: Path, title: str) -> dict:
             raise RuntimeError(f"{title}: missing symbol {sym}")
     if title == "busybox-f5-plan2001":
         for sym in ("full_read", "p2001_session_read", "p2001_session_write",
-                    "region_wait", "region_wake"):
+                    "region_wait", "region_wake",
+                    "pvd_bootstrap", "pvd_chdir", "pvd_getcwd",
+                    "pvd_list", "pvd_cli_run"):
             if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
                 raise RuntimeError(f"{title}: missing console symbol {sym}")
     (reports / f"{title}.readelf.txt").write_text(
@@ -94,7 +97,8 @@ def main() -> None:
     linker = args.kernel / "micropython/gcc/user.ld"
     originals = [args.busybox / path for path in APPLETS.values()]
     inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c", PORT / "session.c",
-              PORT / "main.c", runtime / "rt_startup.o",
+              PORT / "main.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
+              UNIX / "pvd.c", UNIX / "pvd.h", runtime / "rt_startup.o",
               runtime / "rt_start.o", runtime / "rt_stubs.o",
               runtime / "rt_misc.o", runtime / "libm_frexp.o",
               runtime / "libm_ldexp.o", runtime / "libm_scalbn.o", *originals]
@@ -130,6 +134,13 @@ def main() -> None:
             logged(common + ["-c", str(path), "-o", str(obj)], log)
             objects.append(obj)
 
+        pvd_objects = []
+        for name, source in (("pvd", UNIX / "pvd.c"),
+                             ("pvd_cli", PORT / "pvd_cli.c")):
+            obj = build / f"{name}.o"
+            logged(common + ["-c", str(source), "-o", str(obj)], log)
+            pvd_objects.append(obj)
+
         for label, mode in (("busybox-plan2001", "standard"),
                             ("busybox-smoke-plan2001", "smoke"),
                             ("busybox-f5-plan2001", "f5")):
@@ -147,7 +158,9 @@ def main() -> None:
                 "-o", str(elf), str(runtime / "rt_startup.o"),
                 str(runtime / "rt_start.o"), str(runtime / "rt_misc.o"),
                 str(launcher),
-                *map(str, objects), str(runtime / "rt_stubs.o"),
+                *map(str, objects),
+                *(map(str, pvd_objects) if mode == "f5" else ()),
+                str(runtime / "rt_stubs.o"),
                 str(runtime / "libm_frexp.o"),
                 str(runtime / "libm_ldexp.o"),
                 str(runtime / "libm_scalbn.o"),

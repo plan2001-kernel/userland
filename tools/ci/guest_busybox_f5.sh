@@ -85,7 +85,8 @@ cat > "$REPORTS/busybox-f5-guest.md" <<'EOF'
 - **PASS:** Original upstream BusyBox echo_main emits the READY marker on real VGA via a capability-region stdout ring.
 - **PASS:** A QEMU PS/2 key sequence is delivered to the BusyBox process through its read-only stdin ring; userland reads it and prints the verified response on F5.
 - **PASS:** Returning to F1 keeps BusyBox output isolated from the kernel SystemConsole, and switching to F5 restores its history.
-- **LIMITATION:** The interactive read loop is a userland I/O acceptance launcher, NOT BusyBox ash, a POSIX TTY, or a complete multicall port.
+- **PASS:** A process-local PVD builds the /, /usr and /usr/bin memory directory view; pwd, cd and ls are exercised through real F5 keyboard and VGA with missing-directory errors and root confinement.
+- **LIMITATION:** The PVD is RAM-only and names confer no native capability authority; the interactive loop and its pwd/cd/ls builtins are NOT BusyBox ash, a POSIX TTY, or a complete multicall port.
 - **NOT RUN:** Full sh, file descriptors for arbitrary processes, physical keyboard/hardware.
 EOF
 echo "BusyBox F5 real VGA + keyboard guest test PASS"

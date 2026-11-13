@@ -70,7 +70,9 @@ first, then use `seed_busybox_spawn.py` with
 `bash tools/ci/guest_busybox_f5.sh KERNEL IMAGE REPORTS`.
 
 **Scope limits:** No BusyBox `ash`/`sh`, no generic POSIX file descriptor
-table, pipes, termios, job control, filesystem hierarchy or full `libbb`.
+table, pipes, termios, job control, *persistent or native ObjectSpace-backed*
+filesystem hierarchy or full `libbb`. A volatile PVD directory tree is now
+provided by the stage-2 userspace extension described below.
 The read loop is *not* presented as an upstream shell applet. It proves
 that the BusyBox-bearing native ELF can output to and read from F5 using
 real kernel-granted console regions. Physical hardware is NOT RUN.

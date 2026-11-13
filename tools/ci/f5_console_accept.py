@@ -12,7 +12,12 @@ from pathlib import Path
 
 from PIL import Image
 
-monitor, serial, out, fontfile = map(Path, sys.argv[1:])
+if len(sys.argv) not in (5, 6):
+    raise SystemExit("usage: f5_console_accept.py MONITOR SERIAL SCREENS FONT [initial|reboot]")
+mode = sys.argv[5] if len(sys.argv) == 6 else "initial"
+if mode not in ("initial", "reboot"):
+    raise SystemExit("invalid boot phase")
+monitor, serial, out, fontfile = map(Path, sys.argv[1:5])
 out.mkdir(parents=True, exist_ok=True)
 
 source = fontfile.read_text(encoding="utf-8")
@@ -118,41 +123,61 @@ def waitscreen(label, expected, timeout=100):
 
 
 try:
-    reply()  # Initial monitor greeting.
+    reply()  # QEMU monitor greeting.
     waitscreen("system-boot", "kernel>", 120)
     focus(5)
-    ready = waitscreen("f5-ready", "PLAN2001-BUSYBOX-F5-READY")
-    assert "busybox>" in ready
-    for letter in "hello":
-        key(letter)
-    key("ret")
-    result = waitscreen("f5-input-output", "PLAN2001-BUSYBOX-F5-READ:hello")
-    assert "PLAN2001-BUSYBOX-F5-READY" in result
-    focus(1)
-    system = waitscreen("system-isolated", "kernel>")
-    assert "PLAN2001-BUSYBOX-F5-READ:hello" not in system, "stdout leaked into SystemConsole"
-    focus(5)
-    restored = waitscreen("f5-restored", "PLAN2001-BUSYBOX-F5-READ:hello")
-    assert "busybox>" in restored
-    # Stage 2: the same process now accepts an actual in-memory Unix view.
-    assert "PLAN2001-PVD-READY" in restored
-    enter("pwd")
-    waitscreen("pvd-pwd-root", "\n/\nbusybox>")
-    enter("ls")
-    waitscreen("pvd-ls-root", "\nbin\ndev\netc\nhome\ntmp\nusr\nvar\n")
-    enter("cd /usr/bin")
-    enter("pwd")
-    waitscreen("pvd-pwd-bin", "\n/usr/bin\nbusybox>")
-    enter("cd ..")
-    enter("pwd")
-    waitscreen("pvd-pwd-usr", "\n/usr\nbusybox>")
-    enter("cd /missing")
-    waitscreen("pvd-missing", "cd: no such directory")
-    enter("pwd")
-    waitscreen("pvd-cwd-unchanged", "\n/usr\nbusybox>")
-    enter("cd ../../../../")
-    enter("pwd")
-    waitscreen("pvd-root-confined", "\n/\nbusybox>")
-    print("PASS: native PVD pwd/cd/ls through real F5 PS/2 and VGA, errors and root confinement")
+    ready = waitscreen("f5-init-handoff", "PLAN2001-UNIX-SHELL-READY")
+    assert "PLAN2001-UNIX-INIT-ROOT:/" in ready
+    assert "PLAN2001-PVD-READY" in ready
+    assert "PLAN2001-BUSYBOX-F5-READY" in ready
+    assert "unix:/$" in ready, "F5 did not open at the Unix root prompt"
+
+    if mode == "reboot":
+        # This is a second cold QEMU process with the SAME GE/O disk image.
+        # The previous boot ended in /usr/bin; RAM-only cwd must reset.
+        assert "unix:/usr/bin$" not in ready, "previous boot's cwd leaked"
+        enter("pwd")
+        waitscreen("reboot-pwd-root", "\n/\nunix:/$")
+        enter("ls /usr")
+        waitscreen("reboot-ls-usr", "\nbin\nunix:/$")
+        print("PASS: second QEMU boot of same GE/O disk enters unix:/$, "
+              "fresh PVD and shell handoff")
+    else:
+        for letter in "hello":
+            key(letter)
+        key("ret")
+        result = waitscreen("f5-input-output", "PLAN2001-BUSYBOX-F5-READ:hello")
+        assert "PLAN2001-BUSYBOX-F5-READY" in result
+        focus(1)
+        system = waitscreen("system-isolated", "kernel>")
+        assert "PLAN2001-BUSYBOX-F5-READ:hello" not in system, (
+            "stdout leaked into SystemConsole"
+        )
+        focus(5)
+        restored = waitscreen("f5-restored", "PLAN2001-BUSYBOX-F5-READ:hello")
+        assert "unix:/$" in restored
+        enter("pwd")
+        waitscreen("pvd-pwd-root", "\n/\nunix:/$")
+        enter("ls")
+        waitscreen("pvd-ls-root", "\nbin\ndev\netc\nhome\ntmp\nusr\nvar\n")
+        enter("cd /usr/bin")
+        enter("pwd")
+        waitscreen("pvd-pwd-bin", "\n/usr/bin\nunix:/usr/bin$")
+        enter("cd ..")
+        enter("pwd")
+        waitscreen("pvd-pwd-usr", "\n/usr\nunix:/usr$")
+        enter("cd /missing")
+        waitscreen("pvd-missing", "cd: no such directory")
+        enter("pwd")
+        waitscreen("pvd-cwd-unchanged", "\n/usr\nunix:/usr$")
+        enter("cd ../../../../")
+        enter("pwd")
+        waitscreen("pvd-root-confined", "\n/\nunix:/$")
+        # End boot 1 in a non-root directory, verified before stopping QEMU.
+        enter("cd /usr/bin")
+        enter("pwd")
+        waitscreen("pvd-first-boot-last-cwd", "\n/usr/bin\nunix:/usr/bin$")
+        print("PASS: first boot unix-init -> F5 shell, pwd/cd/ls, "
+              "PS/2+VGA and kernel console isolation")
 finally:
     sock.close()

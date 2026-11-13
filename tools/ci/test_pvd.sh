@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and execute the exact freestanding PVD implementation on the host.
+# Host tests for the same freestanding PVD and Unix init sources as the ELF.
 set -euo pipefail
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 OUT=$(mktemp -d)
@@ -13,5 +13,9 @@ BASE=(-std=c11 -Wall -Wextra -Werror -pedantic
 "$CC" "${BASE[@]}" "$ROOT/tests/host/test_pvd_cli.c" \
     "$ROOT/ports/unix/pvd.c" "$ROOT/ports/busybox/pvd_cli.c" \
     -o "$OUT/test-pvd-cli"
+"$CC" "${BASE[@]}" "$ROOT/tests/host/test_unix_init.c" \
+    "$ROOT/ports/unix/init.c" "$ROOT/ports/unix/pvd.c" \
+    "$ROOT/ports/busybox/pvd_cli.c" -o "$OUT/test-unix-init"
 "$OUT/test-pvd"
 "$OUT/test-pvd-cli"
+"$OUT/test-unix-init"

@@ -68,5 +68,13 @@ The F5 acceptance process now carries a bounded userspace Present View Descripto
 (PVD) and the memory-only /bin, /dev, /etc, /home, /tmp, /usr/bin and /var
 directory tree. Its interim console builtins implement pwd, cd and ls; these
 are **not** upstream BusyBox applets or ash. GitHub Actions tests path rules
-with host sanitizers and PS/2+VGA QEMU. No user init, persisted objects, or
-native pathname authority is claimed. See [PVD design](docs/UNIX-PVD.md).
+with host sanitizers and PS/2+VGA QEMU. Stage 2 alone provided no init, persisted objects, or
+native pathname authority. See [PVD design](docs/UNIX-PVD.md).
+
+## Stage 3: Unix init boot entry
+
+The F5 boot-manifest executable now starts a [native Unix-init entry](docs/UNIX-INIT.md)
+that constructs a fresh PVD root and hands it to its statically linked builtin
+shell. The prompt starts at `unix:/$` and follows cwd. GitHub Actions verifies
+a fresh root across **two QEMU boots of the same disposable GE/O disk**.
+The initial shell is not yet upstream BusyBox ash or a separate process.

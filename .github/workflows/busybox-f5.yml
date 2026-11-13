@@ -1,4 +1,4 @@
-name: BusyBox F5 console + userspace PVD (kernel latest main / real VGA QEMU)
+name: Unix init boots F5 at root (kernel latest main / two QEMU boots)
 
 on:
   pull_request:
@@ -11,6 +11,7 @@ on:
       - 'tools/ci/**'
       - 'docs/BUSYBOX-F5.md'
       - 'docs/UNIX-PVD.md'
+      - 'docs/UNIX-INIT.md'
   push:
     branches: [main]
     paths:
@@ -47,7 +48,7 @@ jobs:
             build-essential gcc-14 binutils clang lld file mtools ovmf \
             qemu-system-x86 python3 python3-pil
 
-      - name: Test host PVD path traversal and F5 builtins (ASan/UBSan)
+      - name: Host PVD and unix-init handoff/restart tests (ASan/UBSan)
         run: bash tools/ci/test_pvd.sh
 
       - name: Resolve latest kernel main once, and verify BusyBox source SHA
@@ -67,23 +68,23 @@ jobs:
           tools/build-mpy-gcc.sh -j 4
           tools/build.sh
 
-      - name: Build native BusyBox applets and F5 I/O launcher
+      - name: Link native Unix init and embedded F5 shell with BusyBox applets
         run: |
           python3 tools/ci/build_busybox_target.py \
             --kernel "${{ runner.temp }}/plan2001-sources/kernel" \
             --busybox "${{ runner.temp }}/plan2001-sources/busybox" \
             --reports "${{ runner.temp }}/plan2001-reports" --cc gcc-14
 
-      - name: Seed disposable GE/O with verified native MicroPython and BusyBox F5 ELF
+      - name: Seed disposable GE/O with MicroPython and native Unix init F5 ELF
         run: |
           python3 tools/ci/seed_busybox_spawn.py \
             --kernel "${{ runner.temp }}/plan2001-sources/kernel" \
-            --elf "${{ runner.temp }}/plan2001-reports/busybox-target/busybox-f5-plan2001.elf" \
+            --elf "${{ runner.temp }}/plan2001-reports/busybox-target/unix-init-f5-plan2001.elf" \
             --init tests/guest/busybox_spawn_init.py \
             --image "${{ runner.temp }}/plan2001-reports/busybox-f5-o.img" \
             --reports "${{ runner.temp }}/plan2001-reports"
 
-      - name: Verify F5 console and PVD pwd/cd/ls on real VGA using PS/2 keyboard in QEMU
+      - name: Verify init boot root, shell handoff and reboot reset in two real QEMU boots
         run: |
           bash tools/ci/guest_busybox_f5.sh \
             "${{ runner.temp }}/plan2001-sources/kernel" \
@@ -101,19 +102,19 @@ jobs:
               printf '\n**NOT COMPLETED:** %s\n' "$report" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
-          echo 'NOT RUN: Unix init, GE/O persistence, BusyBox ash/sh, full POSIX tty, hardware.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'NOT RUN: external shell SPAWN, persistent GE/O directories, BusyBox ash/sh, full POSIX tty, hardware.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload native F5 guest proof (no disk images)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: busybox-f5-vga-qemu
+          name: unix-init-f5-two-boots-qemu
           path: |
             ${{ runner.temp }}/plan2001-reports/*.md
             ${{ runner.temp }}/plan2001-reports/*.json
             ${{ runner.temp }}/plan2001-reports/*.log
             ${{ runner.temp }}/plan2001-reports/qemu-busybox-f5/*.log
-            ${{ runner.temp }}/plan2001-reports/qemu-busybox-f5/screens/*.txt
-            ${{ runner.temp }}/plan2001-reports/qemu-busybox-f5/screens/*.ppm
+            ${{ runner.temp }}/plan2001-reports/qemu-busybox-f5/screens/**/*.txt
+            ${{ runner.temp }}/plan2001-reports/qemu-busybox-f5/screens/**/*.ppm
           if-no-files-found: warn
           retention-days: 14

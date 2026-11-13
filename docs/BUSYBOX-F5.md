@@ -13,7 +13,7 @@ promise that the next `main` will work.
 
 The kernel creates a permanent SystemConsole on F1, and boot manifest slots
 1..8 correspond to Ctrl+Alt+F2..F9. In this fixture, three MicroPython REPLs
-occupy F2, F3, F4; the native BusyBox F5 ELF is manifest slot 4. The console
+occupy F2, F3, F4; the native unix-init F5 ELF is manifest slot 4. The console
 regions are installed **after OEXECUTE**, and the C adapter discovers them
 by `obj_list` rather than raw OIDs or ambient I/O grants.
 
@@ -41,14 +41,14 @@ boot manifest console. This is not conflated with the three session rings.
 
 The native builder compiles unmodified upstream `true.c`, `false.c`
 and `echo.c`, linking them with Plan2001's freestanding libc and a
-small userland dispatcher. A third build, `busybox-f5-plan2001.elf`,
-uses the same upstream applet objects plus a **userland F5 I/O acceptance
-launcher**, which:
+small userland dispatcher. A third build, `unix-init-f5-plan2001.elf`,
+uses the same upstream applet objects plus a native **Unix-init boot entry
+and linked builtin F5 shell**, which:
 
 1. Calls the *real upstream* `echo_main` to print
    `PLAN2001-BUSYBOX-F5-READY`.
-2. Prints `busybox> `, reads the native stdin stream and echoes typed
-   characters into the stdout stream.
+2. Bootstraps the userspace PVD at `/`, then starts the linked builtin shell
+   at `unix:/$ ` and echoes native stdin into stdout. The prompt tracks cwd.
 3. On Return, prints `PLAN2001-BUSYBOX-F5-READ:hello` when the user typed
    `hello` and Return.
 
@@ -65,7 +65,7 @@ verifies F5 output, checks F1 isolation and returns to F5 to verify history.
 Run locally on Debian using the same native and QEMU packages as the
 [BusyBox target](BUSYBOX-TARGET.md), plus `python3-pil`. Build the target
 first, then use `seed_busybox_spawn.py` with
-`--elf .../busybox-f5-plan2001.elf` and
+`--elf .../unix-init-f5-plan2001.elf` and
 `--init tests/guest/busybox_spawn_init.py`, and run
 `bash tools/ci/guest_busybox_f5.sh KERNEL IMAGE REPORTS`.
 
@@ -79,9 +79,19 @@ real kernel-granted console regions. Physical hardware is NOT RUN.
 
 ## Stage-2 PVD extension
 
-The phase-2 F5 launcher additionally constructs a **process-local memory-only**
-Unix directory projection with a bounded PVD. Its small pwd/cd/ls builtins
+The phase-2 F5 launcher originally constructed a **process-local memory-only**
+Unix directory projection with a bounded PVD. Stage 3 moves that construction
+into the explicit Unix-init entry. Its small pwd/cd/ls builtins
 are tested in the same genuine PS/2 keyboard and VGA QEMU acceptance. No
 native ObjectSpace/GE/O Handle is created from a directory name. See
 [UNIX-PVD.md](UNIX-PVD.md) for semantics and limits. The F5 launcher is
-still not BusyBox ash, and unix-init and persistent paths are still absent.
+still not BusyBox ash, and persistent paths remain absent.
+
+## Stage-3 boot and restart verification
+
+The F5 boot manifest loads unix-init, which checks authorized session
+regions, initializes a fresh PVD, then invokes the linked shell. The test
+boots the **same disposable GE/O disk twice** and verifies that cwd `/usr/bin`
+in the previous boot cannot survive the next boot. Shell is a same-process
+builtin reader until the later process-launch and descriptor stage. See
+[UNIX-INIT](UNIX-INIT.md).

@@ -9,7 +9,7 @@ object access from the pathname, a raw OID, or matching OwnerID.
 
 ## Bootstrapped memory view
 
-The BusyBox-bearing F5 acceptance launcher calls pvd_bootstrap() to create:
+The Unix-init invoked by the F5 boot manifest calls pvd_bootstrap() to create:
 
     /
     ├── bin/
@@ -39,8 +39,8 @@ The stage-2 F5 launcher recognizes pwd, cd PATH and ls [PATH]. These are
 small **userspace builtins**, not the corresponding upstream BusyBox applets,
 not ash/sh and not POSIX fd/path syscalls. They use the existing F5
 capability-region console adapter. The prior native BusyBox echo_main still
-runs as the F5 startup I/O proof. No Unix init exists yet; the temporary
-fixture constructs the PVD in the F5 process.
+runs as the F5 startup I/O proof. Stage 3 moved the PVD setup into
+unix-init, which hands the initialized view to the F5 builtin shell.
 
 ## Tests
 
@@ -58,5 +58,12 @@ builds the freestanding native AMD64 ELF against Plan2001's libc from the
 latest kernel main and executes the actual commands on the real kernel in
 QEMU, using injected PS/2 keyboard events and decoded VGA framebuffer text.
 The workflow archives diagnostic screenshots and source SHAs. Physical
-hardware, Unix init, GE/O file persistence, upstream ash and external
-command execution are **NOT RUN** by stage 2.
+hardware, GE/O file persistence, upstream ash and external
+command execution remain **NOT RUN**. Stage 3 adds unix-init and cold-boot tests.
+
+## Stage-3 boot integration
+
+The boot manifest starts the native unix-init ELF on F5. Init initializes
+the PVD from scratch and passes it to the linked builtin shell, whose prompt
+shows `unix:/$` initially. Two QEMU boots with the same scratch GE/O disk
+prove that cwd resets to `/`. See [UNIX-INIT.md](UNIX-INIT.md).

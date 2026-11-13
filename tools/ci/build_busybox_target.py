@@ -61,11 +61,12 @@ def check_elf(elf: Path, reports: Path, title: str) -> dict:
                 "obj_write"):
         if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
             raise RuntimeError(f"{title}: missing symbol {sym}")
-    if title == "busybox-f5-plan2001":
+    if title == "unix-init-f5-plan2001":
         for sym in ("full_read", "p2001_session_read", "p2001_session_write",
                     "region_wait", "region_wake",
                     "pvd_bootstrap", "pvd_chdir", "pvd_getcwd",
-                    "pvd_list", "pvd_cli_run"):
+                    "pvd_list", "pvd_cli_run",
+                    "p2001_unix_init", "p2001_f5_shell"):
             if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
                 raise RuntimeError(f"{title}: missing console symbol {sym}")
     (reports / f"{title}.readelf.txt").write_text(
@@ -98,7 +99,9 @@ def main() -> None:
     originals = [args.busybox / path for path in APPLETS.values()]
     inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c", PORT / "session.c",
               PORT / "main.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
-              UNIX / "pvd.c", UNIX / "pvd.h", runtime / "rt_startup.o",
+              PORT / "f5_shell.c", PORT / "f5_shell.h",
+              UNIX / "pvd.c", UNIX / "pvd.h", UNIX / "init.c",
+              UNIX / "init.h", runtime / "rt_startup.o",
               runtime / "rt_start.o", runtime / "rt_stubs.o",
               runtime / "rt_misc.o", runtime / "libm_frexp.o",
               runtime / "libm_ldexp.o", runtime / "libm_scalbn.o", *originals]
@@ -136,14 +139,16 @@ def main() -> None:
 
         pvd_objects = []
         for name, source in (("pvd", UNIX / "pvd.c"),
-                             ("pvd_cli", PORT / "pvd_cli.c")):
+                             ("pvd_cli", PORT / "pvd_cli.c"),
+                             ("unix_init", UNIX / "init.c"),
+                             ("f5_shell", PORT / "f5_shell.c")):
             obj = build / f"{name}.o"
             logged(common + ["-c", str(source), "-o", str(obj)], log)
             pvd_objects.append(obj)
 
         for label, mode in (("busybox-plan2001", "standard"),
                             ("busybox-smoke-plan2001", "smoke"),
-                            ("busybox-f5-plan2001", "f5")):
+                            ("unix-init-f5-plan2001", "f5")):
             launcher = build / ("main-" + mode + ".o")
             flags = (["-DPLAN2001_BUSYBOX_GUEST_SMOKE=1"] if mode == "smoke"
                      else ["-DPLAN2001_BUSYBOX_F5=1"] if mode == "f5" else [])
@@ -177,7 +182,7 @@ def main() -> None:
             "- **PASS:** upstream BusyBox 1.36.1 `true.c`, `false.c`, "
             "and `echo.c` compiled unchanged with freestanding GCC.\n"
             "- **PASS:** linked a limited Plan2001 native multicall ELF "
-            "a guest-smoke ELF, and an F5 I/O fixture using native libc, "
+            "a guest-smoke ELF, and the F5 unix-init/shell ELF using native libc, "
             "native startup/syscalls and libgcc.\n"
             "- **PASS:** static AMD64 ELF checks, no dynamic interpreter, "
             "no undefined symbols and exactly two PT_LOAD segments.\n"

@@ -60,6 +60,11 @@ def check_elf(elf: Path, reports: Path, title: str) -> dict:
                 "obj_write"):
         if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
             raise RuntimeError(f"{title}: missing symbol {sym}")
+    if title == "busybox-f5-plan2001":
+        for sym in ("full_read", "p2001_session_read", "p2001_session_write",
+                    "region_wait", "region_wake"):
+            if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
+                raise RuntimeError(f"{title}: missing console symbol {sym}")
     (reports / f"{title}.readelf.txt").write_text(
         header + "\n" + phdr + "\n" + dynamic
         + "\nUNDEFINED SYMBOLS:\n" + (undef or "(none)") + "\n",
@@ -88,7 +93,7 @@ def main() -> None:
     archive = args.kernel / "build/gcc/mpy/lib/libc-user.a"
     linker = args.kernel / "micropython/gcc/user.ld"
     originals = [args.busybox / path for path in APPLETS.values()]
-    inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c",
+    inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c", PORT / "session.c",
               PORT / "main.c", runtime / "rt_startup.o",
               runtime / "rt_start.o", runtime / "rt_stubs.o",
               runtime / "rt_misc.o", runtime / "libm_frexp.o",
@@ -118,16 +123,19 @@ def main() -> None:
         "linux_host_libc_used_for_target": False,
         "qemu_result": "NOT ASSESSED by build script"}
     try:
-        for name, source in {**APPLETS, "compat": str(PORT / "compat.c")}.items():
+        for name, source in {**APPLETS, "compat": str(PORT / "compat.c"),
+                             "session": str(PORT / "session.c")}.items():
             path = (args.busybox / source if name in APPLETS else Path(source))
             obj = build / f"{name}.o"
             logged(common + ["-c", str(path), "-o", str(obj)], log)
             objects.append(obj)
 
-        for label, smoke in (("busybox-plan2001", False),
-                             ("busybox-smoke-plan2001", True)):
-            launcher = build / ("main-smoke.o" if smoke else "main.o")
-            flags = (["-DPLAN2001_BUSYBOX_GUEST_SMOKE=1"] if smoke else [])
+        for label, mode in (("busybox-plan2001", "standard"),
+                            ("busybox-smoke-plan2001", "smoke"),
+                            ("busybox-f5-plan2001", "f5")):
+            launcher = build / ("main-" + mode + ".o")
+            flags = (["-DPLAN2001_BUSYBOX_GUEST_SMOKE=1"] if mode == "smoke"
+                     else ["-DPLAN2001_BUSYBOX_F5=1"] if mode == "f5" else [])
             logged(common + flags + ["-c", str(PORT / "main.c"),
                                      "-o", str(launcher)], log)
             elf = build / (label + ".elf")
@@ -156,14 +164,14 @@ def main() -> None:
             "- **PASS:** upstream BusyBox 1.36.1 `true.c`, `false.c`, "
             "and `echo.c` compiled unchanged with freestanding GCC.\n"
             "- **PASS:** linked a limited Plan2001 native multicall ELF "
-            "and a separate guest-smoke ELF using only native libc, "
+            "a guest-smoke ELF, and an F5 I/O fixture using native libc, "
             "native startup/syscalls and libgcc.\n"
             "- **PASS:** static AMD64 ELF checks, no dynamic interpreter, "
             "no undefined symbols and exactly two PT_LOAD segments.\n"
             "- **NOT RUN:** complete upstream BusyBox Makefile/libbb port, "
             "full POSIX semantics or all BusyBox applets.\n"
             "- **NOT RUN here:** QEMU guest execution (separate step).\n"
-            "\nTwo target ELF images are stored in the **runner scratch "
+            "\nThree target ELF images are stored in the **runner scratch "
             "build tree** and are not shipped as Linux binaries. The "
             "source files and BSD/GPL provenance remain pinned.\n",
             encoding="utf-8")

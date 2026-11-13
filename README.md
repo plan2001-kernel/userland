@@ -2,7 +2,7 @@
 
 A small Unix-like userspace built on the experimental [Plan2001 kernel](https://github.com/plan2001-kernel/kernel).
 
-**Status:** Pinned source CI and libc symbol audit are implemented. A new first-stage native target workflow builds original BusyBox `true`/`false`/`echo` applets with Plan2001's own libc and tests them on the real kernel in QEMU. The new MicroPython child-process integration uses native SPAWN/process Handle observation in QEMU. These are **limited three-applet subset** tests, not a complete upstream BusyBox multicall port or POSIX layer.
+**Status:** Live kernel `main` CI, BusyBox-pinned source control and libc symbol audit are implemented. A new first-stage native target workflow builds original BusyBox `true`/`false`/`echo` applets with Plan2001's own libc and tests them on the real kernel in QEMU. The new MicroPython child-process integration uses native SPAWN/process Handle observation in QEMU. These are **limited three-applet subset** tests, not a complete upstream BusyBox multicall port or POSIX layer.
 
 ## Goal
 
@@ -30,9 +30,9 @@ The familiar `/bin`, `/usr`, `/etc`, and `/tmp` directories are userland project
 
 ## Build and CI workspace
 
-The [build mechanism](docs/BUILD.md) pins the external kernel and BusyBox sources in [`config/sources.json`](config/sources.json). GitHub Actions fetches each as a **sibling source tree** outside the userland repo, verifies the exact commits, inspects the kernel's `runtime/libc` and native ABI, and builds a minimal **Linux-host static BusyBox control** (`true`, `false`, `echo`). That control is intentionally linked against the Linux runner's libc and is **not** a Plan2001 program.
+The [build mechanism](docs/BUILD.md) fetches the **latest kernel `main` on every CI run**, records the resolved commit as the run's source manifest, and keeps BusyBox pinned by SHA using [`config/sources.json`](config/sources.json). Actions checks out both as **sibling source trees** outside the userland repo, audits the native ABI/libc, and builds a minimal **Linux-host static BusyBox control** (`true`, `false`, `echo`). That control is intentionally linked against the Linux runner's libc and is **not** a Plan2001 program.
 
-The native diagnostic workflow links the upstream BusyBox `true.c` applet (not the full multicall binary) against the actual Plan2001 runtime and runs separate guest checks. The dedicated [libc ABI audit](docs/libc-audit.md) compares host-compiled BusyBox object references with native library exports. These checks are not evidence of complete POSIX compatibility.
+The native diagnostic workflow links the upstream BusyBox `true.c` applet against Plan2001's runtime and runs separate guest checks. The [F5 console test](docs/BUSYBOX-F5.md) also builds a native BusyBox-bearing ELF, executes upstream `echo_main` on kernel manifest slot 4 and reads PS/2 keyboard input through kernel-granted console regions, with real QEMU VGA verification. The dedicated [libc ABI audit](docs/libc-audit.md) compares host-compiled BusyBox object references with native library exports. These checks are not evidence of complete POSIX compatibility.
 
 ## Milestones (proposed)
 
@@ -48,6 +48,7 @@ The native diagnostic workflow links the upstream BusyBox `true.c` applet (not t
 - [GitHub Actions libc ABI audit and evidence](docs/libc-audit.md)
 - [Native BusyBox target subset build and QEMU smoke test](docs/BUSYBOX-TARGET.md)
 - [MicroPython native BusyBox child-process launch, QEMU and command example](docs/BUSYBOX-SPAWN.md)
+- [Native F5 console I/O adapter, capability rings and QEMU acceptance](docs/BUSYBOX-F5.md)
 - [GitHub Actions build workflow](.github/workflows/build.yml)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Minimal POSIX profile](docs/POSIX-PROFILE.md)

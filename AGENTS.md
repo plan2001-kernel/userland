@@ -16,7 +16,7 @@ Read `README.md`, `docs/ARCHITECTURE.md`, `docs/POSIX-PROFILE.md`, and `docs/POR
 8. Never silently reformat GE/O volumes.
 9. Use English for agent tasks and code-facing docs. Make bounded PRs and do not merge without explicit authorization.
 10. State exact tests run, their results and **NOT RUN** limitations. Compilation is not runtime evidence.
-11. Use [`config/sources.json`](config/sources.json) as the sole source for immutable external kernel and BusyBox commits. Never silently update them or vendor the kernel into userland.
-12. The current CI builds a Linux-host static BusyBox **control**, not a Plan2001 ELF. A successful host check must never be presented as successful Plan2001 libc linkage or QEMU boot.
+11. Use [`config/sources.json`](config/sources.json) as the source policy: **always fetch the latest kernel `main`** per CI run, record its resolved SHA in `reports/sources.json`, and keep BusyBox immutable at its declared commit. Never vendor the kernel into userland.
+12. The host-control workflow builds a Linux-host static BusyBox **control**, not a Plan2001 ELF. Distinct native target, SPAWN, and F5 QEMU workflows exist. Only actual passing guest runs establish runtime behavior; the F5 fixture is not yet BusyBox sh.
 
 **First implementation task:** audit a deliberately minimal BusyBox compile/link on Debian against Plan2001's current ABI and C runtime.

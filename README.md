@@ -47,6 +47,7 @@ The native diagnostic workflow links the upstream BusyBox `true.c` applet agains
 - [Build mechanism and local Debian commands](docs/BUILD.md)
 - [GitHub Actions libc ABI audit and evidence](docs/libc-audit.md)
 - [Native BusyBox target subset build and QEMU smoke test](docs/BUSYBOX-TARGET.md)
+- [Userspace PVD and memory-only Unix directory tree (stage 2)](docs/UNIX-PVD.md)
 - [MicroPython native BusyBox child-process launch, QEMU and command example](docs/BUSYBOX-SPAWN.md)
 - [Native F5 console I/O adapter, capability rings and QEMU acceptance](docs/BUSYBOX-F5.md)
 - [GitHub Actions build workflow](.github/workflows/build.yml)
@@ -60,3 +61,12 @@ The authoritative native definitions are in the [kernel ObjectSpace architecture
 ## Licensing
 
 BusyBox is GPLv2-licensed. Record source provenance and licenses before importing BusyBox sources or kernel runtime code. No third-party sources are included at this stage.
+
+## Stage 2: volatile Unix paths
+
+The F5 acceptance process now carries a bounded userspace Present View Descriptor
+(PVD) and the memory-only /bin, /dev, /etc, /home, /tmp, /usr/bin and /var
+directory tree. Its interim console builtins implement pwd, cd and ls; these
+are **not** upstream BusyBox applets or ash. GitHub Actions tests path rules
+with host sanitizers and PS/2+VGA QEMU. No user init, persisted objects, or
+native pathname authority is claimed. See [PVD design](docs/UNIX-PVD.md).

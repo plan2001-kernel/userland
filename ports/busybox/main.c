@@ -3,6 +3,9 @@
  * General BusyBox / POSIX support is explicitly out of scope.
  */
 #include "libbb.h"
+#ifdef PLAN2001_BUSYBOX_F5
+#include "pvd_cli.h"
+#endif
 
 extern int true_main(int argc, char **argv);
 extern int false_main(int argc, char **argv);
@@ -50,7 +53,8 @@ int plan2001_busybox_dispatch(int argc, char **argv)
 int main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
 {
     char *args[] = { "busybox", "echo", "PLAN2001-BUSYBOX-F5-READY", 0 };
-    char line[64];
+    char line[128];
+    static Pvd view;
     unsigned int used = 0;
     char ch;
     long n;
@@ -58,6 +62,10 @@ int main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
     static const char reply[] = "PLAN2001-BUSYBOX-F5-READ:";
     if (plan2001_busybox_dispatch(3, args) != 0)
         exits("F5 echo failed");
+    if (pvd_bootstrap(&view) != PVD_OK)
+        exits("F5 PVD bootstrap failed");
+    if (full_write(1, "PLAN2001-PVD-READY\n", 19) != 19)
+        exits("F5 PVD announcement failed");
     if (full_write(1, prompt, sizeof(prompt)-1) != sizeof(prompt)-1)
         exits("F5 prompt failed");
     for (;;) {
@@ -65,12 +73,16 @@ int main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
         if (n != 1)
             exits("F5 stdin unavailable");
         if (ch == '\r' || ch == '\n') {
+            line[used] = 0;
             if (full_write(1, "\n", 1) != 1 ||
                 full_write(1, reply, sizeof(reply)-1) != sizeof(reply)-1 ||
                 full_write(1, line, used) != (ssize_t)used ||
-                full_write(1, "\n", 1) != 1 ||
-                full_write(1, prompt, sizeof(prompt)-1) != sizeof(prompt)-1)
+                full_write(1, "\n", 1) != 1)
                 exits("F5 response failed");
+            if (pvd_cli_run(&view, line) < 0)
+                exits("F5 PVD output failed");
+            if (full_write(1, prompt, sizeof(prompt)-1) != sizeof(prompt)-1)
+                exits("F5 prompt failed");
             used = 0;
         } else if (ch == 8 || ch == 127) {
             if (used) {

@@ -1,0 +1,76 @@
+# Native BusyBox F5 console adapter
+
+CI: [BusyBox F5](../.github/workflows/busybox-f5.yml).
+The kernel and userland are separate repositories: CI **always fetches the
+current kernel `main` branch** at the time of each run, records that
+resolved commit in the uploaded `sources.json`, and uses that detached
+checkout for the entire job. BusyBox 1.36.1 remains immutable at the
+upstream commit declared in [sources.json](../config/sources.json).
+Results are tied to a specific resolved kernel commit, not to an evergreen
+promise that the next `main` will work.
+
+## Native session transport
+
+The kernel creates a permanent SystemConsole on F1, and boot manifest slots
+1..8 correspond to Ctrl+Alt+F2..F9. In this fixture, three MicroPython REPLs
+occupy F2, F3, F4; the native BusyBox F5 ELF is manifest slot 4. The console
+regions are installed **after OEXECUTE**, and the C adapter discovers them
+by `obj_list` rather than raw OIDs or ambient I/O grants.
+
+Three attenuated region Handles are required:
+
+| Console stream | Authorized Handle | Mapping | Backend |
+| --- | --- | --- | --- |
+| stdin (fd 0) | `VkindRegion`, `Vread` | RO | Kernel keyboard publisher |
+| stdout (fd 1) | `VkindRegion`, `Vwrite` | RW | Userland producer, kernel VGA consumer |
+| stderr (fd 2) | `VkindRegion`, `Vwrite` | RW | Userland producer, kernel VGA consumer |
+
+All three are checked for `ObjRingHeader` version/magic/geometry. Output
+publishes complete fixed-size slots with release ordering, notifies readers
+with `REGIONWAKE`, and respects the kernel's acknowledgement sequence.
+Input validates immutable published slots with acquire ordering and sleeps
+on `REGIONWAIT`, avoiding busy-poll loops. Invalid or absent grants fail
+instead of pretending input was read. No direct framebuffer mapping, PS/2
+claim, kernel Unix tty, or new syscall is introduced.
+
+The ordinary MicroPython SPAWN test still uses its separate, explicitly
+delegated 4096-byte output region, because such children do not receive a
+boot manifest console. This is not conflated with the three session rings.
+
+## What is actually tested
+
+The native builder compiles unmodified upstream `true.c`, `false.c`
+and `echo.c`, linking them with Plan2001's freestanding libc and a
+small userland dispatcher. A third build, `busybox-f5-plan2001.elf`,
+uses the same upstream applet objects plus a **userland F5 I/O acceptance
+launcher**, which:
+
+1. Calls the *real upstream* `echo_main` to print
+   `PLAN2001-BUSYBOX-F5-READY`.
+2. Prints `busybox> `, reads the native stdin stream and echoes typed
+   characters into the stdout stream.
+3. On Return, prints `PLAN2001-BUSYBOX-F5-READ:hello` when the user typed
+   `hello` and Return.
+
+The test builds the actual latest kernel, UEFI loader, MicroPython,
+native libc and GE/O tools. It installs MicroPython at OID
+`0x4f45584543000003` and the F5 BusyBox executable at
+`0x4f45584543000005` into a **disposable regular-file image**, checking
+both ELFs' SHA-256 via the kernel's GE/O inspector. A boot manifest
+installs four independent process consoles. QEMU's monitor sends
+`Ctrl+Alt+F5` and actual emulated PS/2 key events; the acceptance
+checker decodes the real framebuffer using the kernel's bitmap font,
+verifies F5 output, checks F1 isolation and returns to F5 to verify history.
+
+Run locally on Debian using the same native and QEMU packages as the
+[BusyBox target](BUSYBOX-TARGET.md), plus `python3-pil`. Build the target
+first, then use `seed_busybox_spawn.py` with
+`--elf .../busybox-f5-plan2001.elf` and
+`--init tests/guest/busybox_spawn_init.py`, and run
+`bash tools/ci/guest_busybox_f5.sh KERNEL IMAGE REPORTS`.
+
+**Scope limits:** No BusyBox `ash`/`sh`, no generic POSIX file descriptor
+table, pipes, termios, job control, filesystem hierarchy or full `libbb`.
+The read loop is *not* presented as an upstream shell applet. It proves
+that the BusyBox-bearing native ELF can output to and read from F5 using
+real kernel-granted console regions. Physical hardware is NOT RUN.

@@ -174,9 +174,9 @@ try:
             # A SECOND native process reads the exact same committed
             # service view via two delegated UXPIPE channels, no volume.
             enter("cat /tmp/fromclient")
-            waitscreen("geo-rpc-reboot-local", "\\nremote\\nunix:/$")
+            waitscreen("geo-rpc-reboot-local", "\nremote\nunix:/$")
             enter("uxfile get /tmp/fromclient")
-            waitscreen("geo-rpc-reboot-remote", "\\nremote\\nunix:/$")
+            waitscreen("geo-rpc-reboot-remote", "\nremote\nunix:/$")
             print("PASS: GE/O restored file written by a separate UXPIPE RPC client")
             print("PASS: real GE/O manifest and file restored across fresh QEMU boot")
         elif mode == "persist-initial":
@@ -186,16 +186,16 @@ try:
             # The F5 Unix-init remains the only UXFS/GE/O owner. A
             # separate SPAWNed process sees shell changes via bounded RPC.
             enter("uxfile get /tmp/persisted")
-            waitscreen("geo-rpc-shell-to-child", "\\npersist2026\\nunix:/$")
+            waitscreen("geo-rpc-shell-to-child", "\npersist2026\nunix:/$")
             enter("uxfile put /tmp/fromclient remote")
             enter("cat /tmp/fromclient")
-            waitscreen("geo-rpc-child-to-shell", "\\nremote\\nunix:/$")
+            waitscreen("geo-rpc-child-to-shell", "\nremote\nunix:/$")
             enter("uxfile put /etc/protected secret")
             waitscreen("geo-rpc-denied", "uxfile: output failed")
             enter("cat /etc/protected")
             waitscreen("geo-rpc-denied-no-file", "cat: no such directory")
             spawns = re.findall(
-                r"o: SPAWN pid=\\d+ handle=\\d+ oid=0x4f45584543000006\\b",
+                r"o: SPAWN pid=\d+ handle=\d+ oid=0x4f45584543000006\b",
                 serial.read_text(errors="replace"))
             assert len(spawns) >= 4, (
                 "Unix file RPC did not launch separate capability-limited clients")

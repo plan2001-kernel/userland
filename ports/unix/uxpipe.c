@@ -35,6 +35,7 @@ int uxpipe_format(UxPipeData *data, UxPipeAck *ack)
     ack->version = UXPIPE_VERSION;
     publish(&ack->consumed,0);
     publish(&ack->closed,0);
+    publish(&ack->ready,0);
     return 0;
 }
 static int valid(UxPipe *pipe)
@@ -64,7 +65,12 @@ int uxpipe_bind(UxPipe *pipe, UxPipeData *data, UxPipeAck *ack,
     pipe->data_base = data_base;
     pipe->ack_base = ack_base;
     pipe->role = role;
-    return valid(pipe) ? 0 : -1;
+    if (!valid(pipe)) return -1;
+    if (role == UXPIPE_READER) {
+        publish(&ack->ready,1);
+        (void)region_wake(ack_base,UXPIPE_READY_OFFSET,1);
+    }
+    return 0;
 }
 long uxpipe_write(UxPipe *pipe, const void *bytes,
                   unsigned int count, long long timeout_ms)

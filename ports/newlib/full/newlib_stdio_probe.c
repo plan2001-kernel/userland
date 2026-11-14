@@ -13,6 +13,7 @@
 #include <sys/time.h>
 #include "obj.h"
 #include "plan2001_full.h"
+#include "../../unix/uxpipe.h"
 
 extern int _fstat(int fd, struct stat *st);
 extern int _open(const char *path, int flags, ...);
@@ -27,6 +28,66 @@ static void check(int predicate, const char *what)
         fflush(stderr);
         _exit(9);
     }
+}
+
+
+/* Test the *actual* native Plan2001 region maps and the supervisor's
+ * UXPIPE format, not a Linux pipe or synthetic success. */
+static void check_uxpipe(void)
+{
+    int handles[6];
+    uintptr_t maps[6];
+    unsigned i;
+    static const char payload[] = "newlib-uxpipe-input";
+    static const char output[] = "newlib-uxpipe-output";
+    char readback[sizeof(payload)];
+    struct stat st;
+    for(i=0;i<6;++i) {
+        long h = p9_full_region_create(UXPIPE_PAGE);
+        check(h>0, "create UXPIPE region");
+        handles[i]=(int)h;
+        maps[i]=(uintptr_t)p9_full_region_map(handles[i],0);
+        check(maps[i]!=0 && maps[i]!=(uintptr_t)-1, "initialize UXPIPE");
+    }
+    for(i=0;i<3;++i)
+        check(uxpipe_format((UxPipeData *)maps[2*i],
+                            (UxPipeAck *)maps[2*i+1])==0, "format UXPIPE");
+    /* Simulate an already-published stdin + explicit producer EOF. */
+    memcpy(((UxPipeData *)maps[0])->payload,payload,sizeof(payload));
+    __atomic_store_n(&((UxPipeData *)maps[0])->produced,
+                     sizeof(payload),__ATOMIC_RELEASE);
+    __atomic_store_n(&((UxPipeData *)maps[0])->closed,1,__ATOMIC_RELEASE);
+    for(i=0;i<6;++i)
+        check(p9_full_region_unmap(maps[i])==0, "transfer UXPIPE writers");
+    check(p9_full_bind_uxpipe(handles)==0, "bind supervisor stream grants");
+    check(_fstat(1,&st)==0 && S_ISFIFO(st.st_mode), "stdout UXPIPE fstat");
+    check(read(0,readback,sizeof readback)==sizeof(payload),
+          "read stdin UXPIPE bytes");
+    check(memcmp(readback,payload,sizeof(payload))==0,"stdin content");
+    check(read(0,readback,1)==0,"stdin UXPIPE explicit EOF");
+    check(write(1,output,sizeof(output))==sizeof(output),
+          "write Newlib stdout UXPIPE");
+    check(write(2,output,sizeof(output))==sizeof(output),
+          "write Newlib stderr UXPIPE");
+    check(close(1)==0,"publish Newlib stdout EOF");
+    check(close(2)==0,"publish Newlib stderr EOF");
+    check(_lseek(0,0,0)==-1 && errno==ESPIPE,"UXPIPE is not seekable");
+    /* Read-only observers are permitted while the producer has RW. */
+    for(i=1;i<3;++i) {
+        long mapped=p9_full_region_map(handles[2*i],1);
+        UxPipeData *p;
+        check(mapped>0,"observe published UXPIPE");
+        p=(UxPipeData *)(uintptr_t)mapped;
+        check(p->produced==sizeof(output) && p->closed==1 &&
+              memcmp(p->payload,output,sizeof(output))==0,
+              "Newlib output bytes reached delegated regions");
+        check(p9_full_region_unmap((uintptr_t)mapped)==0,"unmap observer");
+    }
+    p9_full_unbind_uxpipe();
+    for(i=0;i<6;++i)
+        check(p9_full_region_close(handles[i])==0,"close UXPIPE handle");
+    printf("PLAN2001-NEWLIB-FULL-UXPIPE-PASS\\n");
+    fflush(stdout);
 }
 
 int main(int argc, char **argv)

@@ -76,6 +76,7 @@ def main():
     sources = {
         "syscalls": PORT / "plan2001_syscalls.c",
         "posix": PORT / "posix_forward.c",
+        "pipe": ROOT / "ports/unix/uxpipe.c",
         "startup": PORT / "p9_newlib_start.c",
         "boot": PORT / "newlib_stdio_probe.c",
         "child": PORT / "newlib_exit_child.c",
@@ -120,7 +121,7 @@ def main():
                 "-Wl,-z,noexecstack", "-Wl,--gc-sections",
                 "-Wl,--build-id=none", "-o", str(elf),
                 str(startup), str(objects["startup"]), str(objects[program]),
-                str(objects["syscalls"]), str(objects["posix"]), str(native_stubs),
+                str(objects["syscalls"]), str(objects["posix"]), str(objects["pipe"]), str(native_stubs),
                 "-Wl,--start-group", str(libc), str(libm),
                 "-lgcc", "-Wl,--end-group",
             ]
@@ -129,7 +130,7 @@ def main():
             run(link, log)
             required = ["_start", "p9_start", "main", "_exit", "exit"]
             if kind == "boot":
-                required += ["_read", "_write", "_sbrk", "read", "write",
+                required += ["_read", "_write", "_sbrk", "uxpipe_bind", "p9_full_bind_uxpipe", "read", "write",
                              "sbrk", "malloc", "free", "_impure_ptr",
                              "printf", "snprintf", "strtol", "sin"]
             audits.append(audit(elf, build, required))

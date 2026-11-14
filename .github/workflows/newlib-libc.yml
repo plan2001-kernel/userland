@@ -2,7 +2,7 @@ name: Newlib real libc and native Plan2001 runtime
 
 on:
   push:
-    branches: [experiment/newlib-ci]
+    branches: [experiment/newlib-ci, feature/unix-newlib-geo-integration]
     paths:
       - '.github/workflows/newlib-libc.yml'
       - 'ports/newlib/**'
@@ -13,6 +13,7 @@ on:
       - 'tools/ci/seed_busybox_spawn.py'
       - 'tools/ci/guest_libgloss_exit.sh'
       - 'tools/ci/newlib_full_*.sh'
+      - 'ports/unix/uxpipe.*'
   pull_request:
     paths:
       - '.github/workflows/newlib-libc.yml'
@@ -20,6 +21,7 @@ on:
       - 'tools/ci/build_newlib_libc.sh'
       - 'tools/ci/newlib_full_*.py'
       - 'tools/ci/newlib_full_*.sh'
+      - 'ports/unix/uxpipe.*'
   workflow_dispatch:
 
 permissions:

@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include "obj.h"
 #include "sysctl.h"
+#include "../../unix/uxpipe.h"
 
 extern long objcreate(unsigned long long, unsigned long long, void *,
                       unsigned long long, void *);
@@ -27,11 +28,20 @@ extern long objinvoke(int, void *, long);
 extern long objclose(int);
 extern long regionwait(unsigned long long, unsigned long long,
                        unsigned long long, long long);
+extern long regionwake(unsigned long long, unsigned long long,
+                       unsigned long long);
 extern long brk_(void *);
 extern unsigned long long _nsec(void);
 extern void _exits(char *);
 extern char end[];
 
+/* Newlib and the Unix supervisor use the SAME two-region UXPIPE wire format.
+ * The kernel enforces RO/RW map rights. Handles do not turn into Unix FDs.
+ * Binding is opt-in and does not alter standalone Newlib console probes. */
+static UxPipe proxy[3];
+static uintptr_t proxy_maps[6];
+static int proxy_bound;
+static unsigned char proxy_closed[3];
 static uintptr_t read_base;
 static uint64_t read_cursor;
 static unsigned read_pos, read_len;
@@ -78,11 +88,65 @@ long p9_full_region_close(int handle)
     return objclose(handle);
 }
 
+
+long region_wait(unsigned long long base, unsigned long long off,
+                 unsigned long long expected, long long timeout_ms)
+{
+    return regionwait(base, off, expected, timeout_ms);
+}
+long region_wake(unsigned long long base, unsigned long long off,
+                 unsigned long long count)
+{
+    return regionwake(base, off, count);
+}
+void p9_full_unbind_uxpipe(void)
+{
+    unsigned i;
+    for(i = 0; i < 6; ++i) {
+        if(proxy_maps[i]) {
+            (void)p9_full_region_unmap(proxy_maps[i]);
+            proxy_maps[i] = 0;
+        }
+    }
+    memset(proxy, 0, sizeof proxy);
+    memset(proxy_closed, 0, sizeof proxy_closed);
+    proxy_bound = 0;
+}
+int p9_full_bind_uxpipe(const int handles[6])
+{
+    unsigned i;
+    if(!handles) { errno = EINVAL; return -1; }
+    if(proxy_bound || read_base || console_closed[0] || console_closed[1]) {
+        errno = EBUSY; return -1;
+    }
+    for(i = 0; i < 6; ++i) {
+        long mapped;
+        int writable = (i == 1 || i == 2 || i == 4);
+        if(handles[i] <= 0) goto denied;
+        mapped = p9_full_region_map(handles[i], !writable);
+        if(mapped <= 0) goto denied;
+        proxy_maps[i] = (uintptr_t)mapped;
+    }
+    for(i = 0; i < 3; ++i) {
+        int role = i == 0 ? UXPIPE_READER : UXPIPE_WRITER;
+        if(uxpipe_bind(&proxy[i], (UxPipeData *)proxy_maps[2*i],
+                       (UxPipeAck *)proxy_maps[2*i+1],
+                       proxy_maps[2*i], proxy_maps[2*i+1], role))
+            goto denied;
+    }
+    proxy_bound = 1;
+    return 0;
+denied:
+    p9_full_unbind_uxpipe();
+    errno = EACCES;
+    return -1;
+}
+
 int p9_full_bind_stdin(int region_handle)
 {
     long mapped;
     ObjRingHeader *header;
-    if(read_base != 0) { errno = EBUSY; return -1; }
+    if(read_base != 0 || proxy_bound) { errno = EBUSY; return -1; }
     if(region_handle <= 0) { errno = EBADF; return -1; }
     mapped = p9_full_region_map(region_handle, 1);
     if(mapped <= 0) { errno = EACCES; return -1; }
@@ -116,10 +180,16 @@ int _read(int fd, char *buf, int count)
 {
     ObjRingHeader *h;
     unsigned n;
-    if(fd != 0 || read_base == 0) { errno = EBADF; return -1; }
+    if(fd != 0 || (read_base == 0 && !proxy_bound) || proxy_closed[0]) { errno = EBADF; return -1; }
     if(count < 0) { errno = EINVAL; return -1; }
     if(count == 0) return 0;
     if(buf == 0) { errno = EFAULT; return -1; }
+    if(proxy_bound) {
+        long n = uxpipe_read(&proxy[0], buf,
+                             (unsigned)count > UXPIPE_MAX_IO ? UXPIPE_MAX_IO : (unsigned)count, -1);
+        if(n < 0) { errno = EIO; return -1; }
+        return (int)n;
+    }
     h = (ObjRingHeader *)read_base;
     while(read_pos == read_len) {
         uint64_t published = __atomic_load_n(&h->write_seq, __ATOMIC_ACQUIRE);
@@ -173,6 +243,22 @@ int _write(int fd, const char *buf, int count)
     if(count == 0) return 0;
     if(buf == 0) { errno = EFAULT; return -1; }
     index = fd - 1;
+    if(proxy_bound) {
+        unsigned wrote = 0;
+        if(proxy_closed[fd]) { errno = EBADF; return -1; }
+        while(wrote < (unsigned)count) {
+            unsigned n = (unsigned)count - wrote;
+            long got;
+            if(n > UXPIPE_MAX_IO) n = UXPIPE_MAX_IO;
+            got = uxpipe_write(&proxy[fd], buf + wrote, n, -1);
+            if(got <= 0 || (unsigned long)got > n) {
+                if(wrote) return (int)wrote;
+                errno = EIO; return -1;
+            }
+            wrote += (unsigned)got;
+        }
+        return (int)wrote;
+    }
     if(console_closed[index]) { errno = EBADF; return -1; }
     h = console_handles[index];
     if(h < 0) {
@@ -233,6 +319,12 @@ _Noreturn void _exit(int code)
 
 int _close(int fd)
 {
+    if(proxy_bound && fd >= 0 && fd <= 2) {
+        if(proxy_closed[fd]) { errno = EBADF; return -1; }
+        proxy_closed[fd] = 1;
+        if(uxpipe_finish(&proxy[fd])) { errno = EIO; return -1; }
+        return 0;
+    }
     if(fd == 0 && read_base != 0) { p9_full_unbind_stdin(); return 0; }
     if(fd == 1 || fd == 2) {
         int index = fd - 1;
@@ -250,6 +342,13 @@ int _close(int fd)
 int _fstat(int fd, struct stat *st)
 {
     if(st == 0) { errno = EFAULT; return -1; }
+    if(proxy_bound && fd >= 0 && fd <= 2 && !proxy_closed[fd]) {
+        memset(st, 0, sizeof *st);
+        st->st_mode = S_IFIFO | 0600;
+        st->st_nlink = 1;
+        st->st_blksize = UXPIPE_CAPACITY;
+        return 0;
+    }
     if((fd == 0 && read_base != 0) ||
        (fd >= 1 && fd <= 2 && !console_closed[fd-1])) {
         memset(st, 0, sizeof *st);
@@ -264,6 +363,10 @@ int _fstat(int fd, struct stat *st)
 
 int _isatty(int fd)
 {
+    if(proxy_bound && fd >= 0 && fd <= 2) {
+        errno = proxy_closed[fd] ? EBADF : ENOTTY;
+        return 0;
+    }
     if(fd == 1 || fd == 2) {
         if(!console_closed[fd-1]) return 1;
     } else if(fd == 0 && read_base != 0) {
@@ -276,6 +379,10 @@ int _isatty(int fd)
 off_t _lseek(int fd, off_t offset, int whence)
 {
     (void)offset; (void)whence;
+    if(proxy_bound && fd >= 0 && fd <= 2) {
+        errno = proxy_closed[fd] ? EBADF : ESPIPE;
+        return (off_t)-1;
+    }
     if((fd >= 1 && fd <= 2 && !console_closed[fd-1]) ||
        (fd == 0 && read_base != 0)) {
         errno = ESPIPE;

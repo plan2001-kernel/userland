@@ -16,6 +16,8 @@
 #define UXPIPE_PUB_OFFSET 16ULL
 #define UXPIPE_ACK_OFFSET 16ULL
 #define UXPIPE_READY_OFFSET 32ULL
+#define UXPIPE_WRITER_READY_OFFSET 32ULL
+#define UXPIPE_STARTUP_WAIT_MS 5000ULL
 #define UXPIPE_WRITER 1
 #define UXPIPE_READER 2
 
@@ -24,6 +26,7 @@ typedef struct {
     unsigned long long version;
     unsigned long long produced;       /* published with release ordering */
     unsigned long long closed;         /* 1 means producer sent EOF */
+    unsigned long long ready;          /* producer mapped data writer */
     unsigned char payload[UXPIPE_CAPACITY];
 } UxPipeData;
 

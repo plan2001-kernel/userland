@@ -105,3 +105,47 @@ and console I/O, **not** durability of new files or upstream ash.
 Security invariants: no pathname authority or owner-equality shortcut, no
 silent formatting, no added kernel Unix filesystem or pipe, no hidden
 Linux CRT, no unvalidated `ObjOpenVolume` call in userland.
+
+## Follow-on stages 8–11 (same branch and PR)
+
+Stage 8 hardens GE/O publication: modified file contents receive fresh OIDs
+and the durable manifest is published by the final commit. A failed commit
+leaves the caller's committed file OIDs untouched; restore validates a
+temporary complete file/PVD image and only swaps into the live view after
+all authorized reads succeed. Host regression covers an old snapshot after
+commit rejection, no phantom file after oversize write, and a failed
+restore preserving the current cwd. Real multi-boot file persistence remains
+blocked on an explicitly delegated volume Handle + provisioned manifest OID
+for F5; the bootstrap must decide where to install this grant.
+
+Stage 9 provides an opt-in native F5 external `ls` executor when an
+authorized executable volume Handle and executable OID are supplied by
+the caller. It serializes the parent-owned PVD listing to a RO delegated
+region, launches a native child with Oinheritv, waits on its Process Handle,
+and receives stdout from a separate RW output region. No execution from
+a pathname or guessed OID occurs. The normal F5 boot has no executable
+volume grant, so its fallback remains in-process. Host adapter tests
+cover missing grants and child failure, while existing QEMU SPAWN tests
+prove the independent `ls` ELF is executable.
+
+Stage 10 adds `uxpipe.[ch]`, an explicitly authorized single-producer,
+single-consumer ring over TWO separate 4096-byte regions. The producer
+holds writable data and read-only ACK; the consumer holds read-only data
+and writable ACK. Both use release/acquire cursors, REGIONWAIT/WAKE,
+bounded buffering, backpressure, explicit EOF, and peer disconnect status.
+The host regression runs concurrent producer/consumer threads across
+10,000 bytes. It does not replace the F5 evaluator's legacy sequential
+`|` yet.
+
+Stage 11 adds two Plan2001-specific applets, `uxpipe-send` and
+`uxpipe-recv`, for the real QEMU BusyBox SPAWN fixture. The bootstrap
+formats the regions, drops its RW mappings, delegates opposite rights
+to two independent native processes, and verifies produced/consumed
+byte counts (10,000), EOF and consumer acknowledgement after both exit.
+This validates native REGIONWAIT/WAKE and separate child processes, not
+a full shell pipeline. The actual QEMU result must be read from the
+corresponding Actions run; compiling the fixture is not a guest PASS.
+
+Unresolved acceptance gates: GE/O read/write grants for an F5 boot session,
+upstream BusyBox ash's `sys/times.h` plus further libc/libbb requirements,
+and bridging F5 `|` syntax to two concurrently spawned processes.

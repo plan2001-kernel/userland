@@ -47,12 +47,22 @@ jobs:
           actual=subprocess.check_output(['git','-C',dest,'rev-parse','HEAD'],text=True).strip()
           assert actual == info['commit']
           PY
+      - name: Compile and test initial freestanding libc fnmatch dependency
+        run: |
+          gcc -std=c11 -O1 -Wall -Wextra -Werror -pedantic \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -Iports/unix tests/host/test_fnmatch.c ports/unix/fnmatch.c \
+            -o "$RUNNER_TEMP/test-fnmatch"
+          "$RUNNER_TEMP/test-fnmatch"
+          gcc -std=c11 -O2 -Wall -Wextra -Werror \
+            -ffreestanding -nostdinc -fno-builtin -Iports/unix \
+            -c ports/unix/fnmatch.c -o "$RUNNER_TEMP/native-fnmatch.o"
       - name: Attempt actual upstream shell/ash.c against freestanding port
         shell: bash
         run: |
           set +e
           gcc -std=gnu11 -ffreestanding -nostdinc -fno-builtin \
-            -Iports/busybox -c "$RUNNER_TEMP/busybox/shell/ash.c" \
+            -Iports/busybox -Iports/unix -c "$RUNNER_TEMP/busybox/shell/ash.c" \
             -o "$RUNNER_TEMP/ash.o" > "$RUNNER_TEMP/ash.log" 2>&1
           status=$?
           set -e

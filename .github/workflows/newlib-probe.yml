@@ -41,20 +41,28 @@ jobs:
             --dest "$RUNNER_TEMP/plan2001-sources" \
             --reports "$RUNNER_TEMP/plan2001-reports"
 
-      - name: Download and SHA-256 verify Newlib 4.6.0
+      - name: Fetch pinned Newlib 4.6.0 sources from GitHub, verify blobs
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/newlib-source"
-          curl -fL --retry 3 --connect-timeout 20 \
-            https://mirrors.kernel.org/sourceware/newlib/newlib-4.6.0.20260123.tar.gz \
-            -o "$RUNNER_TEMP/newlib.tar.gz"
-          echo "6ff27e3bf022666f43f7802255be680eeff722ac181b1725d21e2e8318604ee3  $RUNNER_TEMP/newlib.tar.gz" \
-            | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/newlib.tar.gz" -C "$RUNNER_TEMP/newlib-source" \
-            --no-same-owner
-          test -f "$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123/newlib/libc/string/strlcpy.c"
-          test -f "$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123/newlib/libc/string/strlcat.c"
-          test -f "$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123/newlib/libc/string/strnlen.c"
+          NEWLIB_COMMIT=8ba4275b83ec27529f67e0d477611fa6d8d6e6bd
+          SOURCE_DIR="$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123/newlib/libc/string"
+          mkdir -p "$SOURCE_DIR"
+          for name in strlcpy strlcat strnlen; do
+            case "$name" in
+              strlcpy) expected=3df2e4565692bab5634a4880f58e7342852ff5ef ;;
+              strlcat) expected=f35977932d1d19121e584033c695819697a3ace1 ;;
+              strnlen) expected=3ee18d1c00ed97f57e12d5c298cf6ffd7b30abd6 ;;
+            esac
+            curl -fL --retry 2 --connect-timeout 10 --max-time 40 \
+              "https://raw.githubusercontent.com/cygwin/cygwin/$NEWLIB_COMMIT/newlib/libc/string/$name.c" \
+              -o "$SOURCE_DIR/$name.c"
+            actual=$(git hash-object "$SOURCE_DIR/$name.c")
+            test "$actual" = "$expected" || {
+              echo "Newlib blob mismatch for $name: got $actual expected $expected" >&2
+              exit 1
+            }
+            echo "Verified Newlib $name.c: $actual"
+          done
 
       - name: Build real Plan2001 AMD64 kernel, UEFI loader
         env:

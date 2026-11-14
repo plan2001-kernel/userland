@@ -66,7 +66,7 @@ def external_ls():
     import plan9
     import space
 
-    expected = b"bin\\ndev\\netc\\nhome\\ntmp\\nusr\\nvar\\n"
+    expected = b"bin\ndev\netc\nhome\ntmp\nusr\nvar\n"
     source = plan9.region_create(4096)
     stdout = plan9.region_create(4096)
     writer = None

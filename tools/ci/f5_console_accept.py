@@ -128,6 +128,7 @@ try:
     waitscreen("system-boot", "kernel>", 120)
     focus(5)
     ready = waitscreen("f5-init-handoff", "PLAN2001-UNIX-SHELL-READY")
+    assert "PLAN2001-UNIX-SUPERVISOR-READY" in ready
     assert "PLAN2001-UNIX-INIT-ROOT:/" in ready
     assert "PLAN2001-PVD-READY" in ready
     assert "PLAN2001-BUSYBOX-F5-READY" in ready

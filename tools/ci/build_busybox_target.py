@@ -103,7 +103,7 @@ def main() -> None:
     linker = args.kernel / "micropython/gcc/user.ld"
     originals = [args.busybox / path for path in APPLETS.values()]
     inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c", PORT / "session.c",
-              PORT / "main.c", PORT / "ls_child.c", PORT / "uxpipe_child.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
+              PORT / "main.c", PORT / "ls_child.c", PORT / "cat_child.c", PORT / "uxpipe_child.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
               PORT / "f5_shell.c", PORT / "f5_shell.h",
               UNIX / "supervisor.c", UNIX / "supervisor.h",
               UNIX / "supervisor_main.c",
@@ -145,6 +145,7 @@ def main() -> None:
         "qemu_result": "NOT ASSESSED by build script"}
     try:
         for name, source in {**APPLETS, "ls_child": str(PORT / "ls_child.c"),
+                             "cat_child": str(PORT / "cat_child.c"),
                              "uxpipe_child": str(PORT / "uxpipe_child.c"),
                              "uxpipe": str(UNIX / "uxpipe.c"),
                              "compat": str(PORT / "compat.c"),

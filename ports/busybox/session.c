@@ -17,6 +17,7 @@ extern long region_wake(unsigned long long, unsigned long long,
                         unsigned long long);
 
 static int probe_state;                 /* 0 unprobed, 1 session, -1 absent, -2 broken */
+static int proxy_streams; /* 0=boot, 2=stdout, 4=stdin+stdout, 6=F5 */
 static int proxy_state;                 /* 1: six explicitly delegated UXPIPE regions */
 static UxPipe proxy_in, proxy_out, proxy_err;
 static unsigned long long inbase, outbase, diagbase;
@@ -61,6 +62,34 @@ int p2001_session_probe(void)
         rights[found]=handles[i].rights;
         ++found;
     }
+    /* Exactly TWO or FOUR attenuated SPAWN UXPIPE grants. Never
+     * mistake these for a native console or a volume capability. */
+    if(found==2 || found==4) {
+        for(i=0;i<found;++i) {
+            unsigned int required = found==2
+                ? (i==0 ? Vwrite : Vread)
+                : (i==0 || i==3 ? Vread : Vwrite);
+            if(rights[i]!=required) goto broken;
+            mapped[i]=obj_region_map(regions[i],0);
+            if(mapped[i]<0) goto broken;
+        }
+        if(found==4 &&
+           uxpipe_bind(&proxy_in,(UxPipeData *)mapped[0],
+                       (UxPipeAck *)mapped[1],
+                       (unsigned long long)mapped[0],
+                       (unsigned long long)mapped[1],UXPIPE_READER)!=0)
+            goto broken;
+        i=found==2 ? 0 : 2;
+        if(uxpipe_bind(&proxy_out,(UxPipeData *)mapped[i],
+                       (UxPipeAck *)mapped[i+1],
+                       (unsigned long long)mapped[i],
+                       (unsigned long long)mapped[i+1],UXPIPE_WRITER)!=0)
+            goto broken;
+        proxy_state=1;
+        proxy_streams=(int)found;
+        probe_state=1;
+        return 1;
+    }
     if (found==6) {
         /* Only these six process-local grants form a proxy console.
          * Extra GE/O volume Handles are classified separately by Unix init.
@@ -87,6 +116,7 @@ int p2001_session_probe(void)
                         (unsigned long long)mapped[5],UXPIPE_WRITER)!=0)
             goto broken;
         proxy_state=1;
+        proxy_streams=6;
         probe_state=1;
         return 1;
     }
@@ -132,6 +162,7 @@ ssize_t p2001_session_write(int fd, const void *buf, size_t count)
 
     if (p2001_session_probe() != 1 || (fd != 1 && fd != 2))
         return -1;
+    if (proxy_state && fd==2 && proxy_streams!=6) return -1;
     if (proxy_state)
         return (ssize_t)uxpipe_write(fd==1 ? &proxy_out : &proxy_err,
                                      buf,(unsigned int)count,-1);
@@ -213,6 +244,7 @@ ssize_t p2001_session_read(int fd, void *buf, size_t count)
     long n, rc;
     if(fd!=0 || p2001_session_probe()!=1 || (!buf && count))
         return -1;
+    if (proxy_state && proxy_streams==2) return 0; /* no stdin */
     if (proxy_state)
         return (ssize_t)uxpipe_read(&proxy_in,buf,(unsigned int)count,-1);
     if(!count) return 0;
@@ -223,4 +255,13 @@ ssize_t p2001_session_read(int fd, void *buf, size_t count)
         if(rc==3) return 0;
         if(rc<0) return -1;
     }
+}
+
+/* A producer must publish EOF before exit; disappearing mappings are not
+ * EOF. F5's persistent six-region proxy is never closed by an applet. */
+void p2001_session_finish(void)
+{
+    if(p2001_session_probe()==1 &&
+       (proxy_streams==2 || proxy_streams==4))
+        (void)uxpipe_finish(&proxy_out);
 }

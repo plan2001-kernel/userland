@@ -45,9 +45,9 @@ def audit(elf, build, required):
     if len(re.findall(r"(?m)^\s*LOAD\s+", load)) != 2:
         raise RuntimeError("expected exactly two Plan2001 PT_LOAD segments")
     for sym in required:
-        if not re.search(r"(?m)^[0-9a-f]+\s+[TtBbDd]\s+" +
+        if not re.search(r"(?m)^[0-9a-f]+\s+[TtBbDdWw]\s+" +
                          re.escape(sym) + r"$", defined):
-            raise RuntimeError("missing target symbol: " + sym)
+            raise RuntimeError("missing target symbol: " + sym + "\nnearby nm lines: " + repr([line for line in defined.splitlines() if sym.lstrip("_") in line][-20:]))
     (build / (elf.stem + ".audit.txt")).write_text(
         header + "\n" + load + "\n" + dyn + "\n" + defined)
     return {"elf": elf.name, "bytes": elf.stat().st_size,

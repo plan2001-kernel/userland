@@ -1,0 +1,104 @@
+name: Unix userland stages 4-7 (independent evidence)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/unix-stages-4-7.yml'
+      - 'ports/unix/**'
+      - 'ports/busybox/**'
+      - 'tests/host/**'
+      - 'tools/ci/test_unix_stages.sh'
+      - 'tools/ci/probe_busybox_ash.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stage4-geo:
+    name: "4: filesystem operations and GE/O restart contract"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get kernel interface without changing the external source pin
+        run: |
+          git clone --depth=1 https://github.com/plan2001-kernel/kernel.git "$RUNNER_TEMP/kernel"
+          git -C "$RUNNER_TEMP/kernel" rev-parse HEAD
+      - name: Host filesystem / GE/O capability mock, reboot, corruption
+        run: bash tools/ci/test_unix_stages.sh 4 "$RUNNER_TEMP/kernel"
+      - name: Limitations
+        if: always()
+        run: |
+          echo 'Stage 4 tests use a transactional GE/O mock; real F5 writes/reboot require an explicitly delegated volume Handle and manifest OID.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Real GE/O two-boot persistence: NOT RUN in this job.' >> "$GITHUB_STEP_SUMMARY"
+
+  stage5-ash:
+    name: "5: upstream ash freestanding compile and libc blocker audit"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get pinned BusyBox 1.36.1 source
+        run: |
+          python3 - <<'PY'
+          import json,os,subprocess
+          info=json.load(open('config/sources.json'))['busybox']
+          dest=os.environ['RUNNER_TEMP']+'/busybox'
+          subprocess.run(['git','clone','https://github.com/'+info['repository']+'.git',dest],check=True)
+          subprocess.run(['git','-C',dest,'checkout','--detach',info['commit']],check=True)
+          actual=subprocess.check_output(['git','-C',dest,'rev-parse','HEAD'],text=True).strip()
+          assert actual == info['commit']
+          PY
+      - name: Attempt actual upstream shell/ash.c against freestanding port
+        shell: bash
+        run: |
+          set +e
+          gcc -std=gnu11 -ffreestanding -nostdinc -fno-builtin \
+            -Iports/busybox -c "$RUNNER_TEMP/busybox/shell/ash.c" \
+            -o "$RUNNER_TEMP/ash.o" > "$RUNNER_TEMP/ash.log" 2>&1
+          status=$?
+          set -e
+          echo '## Stage 5: BusyBox ash native compile attempt' >> "$GITHUB_STEP_SUMMARY"
+          echo "Compiler exit status: $status" >> "$GITHUB_STEP_SUMMARY"
+          echo 'This must not be mistaken for an upstream ash port: stage 7 uses a separate limited evaluator.' >> "$GITHUB_STEP_SUMMARY"
+          sed -n '1,80p' "$RUNNER_TEMP/ash.log" | tee "$RUNNER_TEMP/ash-summary.txt"
+          if [ "$status" -ne 0 ]; then
+            echo '**BLOCKED:** libbb/header/target-libc dependencies still missing.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo 'Compile succeeded; a native static link and guest execution still need verification.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Store upstream ash diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage5-ash-compiler-diagnostic
+          path: ${{ runner.temp }}/ash*.{log,txt}
+          if-no-files-found: warn
+
+  stage6-spawn:
+    name: "6: native SPAWN and explicit descriptor grants"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get kernel headers
+        run: git clone --depth=1 https://github.com/plan2001-kernel/kernel.git "$RUNNER_TEMP/kernel"
+      - name: Test ABI layout, validation, opaque wait and freestanding compilation
+        run: bash tools/ci/test_unix_stages.sh 6 "$RUNNER_TEMP/kernel"
+      - name: Limitations
+        if: always()
+        run: |
+          echo 'Kernel SPAWN wrapper and descriptor-grant ABI: host test + native object compile.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Separate external ls ELF execution in QEMU: NOT RUN here.' >> "$GITHUB_STEP_SUMMARY"
+
+  stage7-streams:
+    name: "7: shell redirection and bounded userland pipe"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get kernel headers
+        run: git clone --depth=1 https://github.com/plan2001-kernel/kernel.git "$RUNNER_TEMP/kernel"
+      - name: Test >, >>, |, cat, error paths, external ls invocation
+        run: bash tools/ci/test_unix_stages.sh 7 "$RUNNER_TEMP/kernel"
+      - name: Limitations
+        if: always()
+        run: |
+          echo 'Pipes are bounded sequential userland buffers, not concurrent processes or full POSIX pipe/dup2.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Real QEMU acceptance is separately covered by the F5 workflow; not proved by host tests.' >> "$GITHUB_STEP_SUMMARY"

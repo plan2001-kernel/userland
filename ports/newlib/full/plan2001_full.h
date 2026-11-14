@@ -14,6 +14,8 @@ int p9_full_bind_uxpipe(const int region_handles[6]);
 /* Enumerate and validate six exact Oinheritv stream grants + Vexecute.
  * No implicit console, OID, or arbitrary writable-region fallback. */
 int p9_full_bind_inherited_uxpipe(void);
+/* Called by p9_start: 1 bound, 0 standalone, -1 invalid partial grants. */
+int p9_full_auto_bind_uxpipe(void);
 void p9_full_unbind_uxpipe(void);
 int p9_full_bind_stdin(int region_handle);
 void p9_full_unbind_stdin(void);

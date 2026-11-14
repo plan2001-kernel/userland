@@ -149,3 +149,22 @@ corresponding Actions run; compiling the fixture is not a guest PASS.
 Unresolved acceptance gates: GE/O read/write grants for an F5 boot session,
 upstream BusyBox ash's `sys/times.h` plus further libc/libbb requirements,
 and bridging F5 `|` syntax to two concurrently spawned processes.
+
+## Stage 12: trusted Unix supervisor in F5 (native QEMU PASS)
+
+See [UNIX-SUPERVISOR.md](UNIX-SUPERVISOR.md). The F5 boot-manifest slot
+now starts a separate trusted userland supervisor ELF. It retains the
+kernel's nondelegable stdin/stdout/stderr session grants and constructs
+three independent two-region SPSC proxies (six delegable grants). The Unix
+init/BusyBox F5 ELF is now an independently spawned process. The
+supervisor delegates a Vexecute-only GE/O Handle to the child, never a
+boot-owner Handle, raw OID, synthetic owner or console-region Vdelegate.
+It only delegates an independent Vread|Vwrite|Vcreate|Vcommit|Vmeta GE/O
+volume capability when explicitly configured with an existing manifest OID;
+this storage path remains **NOT RUN in QEMU** and would be volume-wide.
+
+The real F5 dual-boot QEMU acceptance passed in
+[Actions run 43585614593](https://github.com/plan2001-kernel/userland/actions/runs/43585614593).
+The host grant-policy and native target compilation checks pass in the
+independent stage-6 job. Upstream ash compilation remains a deliberately
+failing independent stage-5 job.

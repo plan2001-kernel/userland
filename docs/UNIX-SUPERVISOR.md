@@ -78,7 +78,7 @@ In a trusted boot manifest the supervisor is configured at the F5 slot:
 [process.unixSupervisorF5]
 source=geo:PARTUUID=<configured-partition>:OID=0x4f45584543000005
 owner=unixSupervisorF5
-args=unix-supervisor 0x4f45584543000006
+args=0x4f45584543000006
 required=true
 ```
 
@@ -91,6 +91,10 @@ process Handle. Invalid completion or bridge errors fail closed and
 request child termination instead of silently granting more authority.
 
 The existing direct F5 process remains a backward-compatible option.
+The kernel inserts the boot-manifest process name as argv[0], so the
+manifest's args field must contain the child OID without an extra
+program-name argument. If a manifest contains a redundant name, the
+supervisor rejects it and exits rather than attempting to guess authority.
 The new supervisor path is tested by the F5 two-boot QEMU acceptance,
 the native static ELF checks and the host grant-policy tests. The separate
 kernel console and the three old MicroPython sessions remain independent.

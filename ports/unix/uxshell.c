@@ -202,7 +202,15 @@ int uxshell_eval(UxFs *fs, const char *line, const UxShellIO *io)
         }
     }
     if (pipe_count && redirect && redirect <= split+1) return PVD_EINVAL;
-    if (split) {
+    if (split && io->pipeline && eq(args[0],"echo") &&
+        eq(args[split+1],"cat") &&
+        (redirect ? redirect : n)==split+2) {
+        unsigned int result_size=0;
+        rc=io->pipeline(io->context,args,split,args+split+1,1,
+                        right.buf,UXFS_DATA_MAX,&result_size);
+        if(rc || result_size>UXFS_DATA_MAX) return PVD_EIO;
+        right.used=result_size;
+    } else if (split) {
         rc = command(fs, args, split, 0, 0, &left, io);
         if (rc) return rc;
         rc = command(fs, args+split+1,

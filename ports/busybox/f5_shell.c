@@ -63,7 +63,8 @@ int p2001_f5_shell(Pvd *view, void *context)
     static const char read_marker[] = "PLAN2001-BUSYBOX-F5-READ:";
     static UxService service;
     UxFs *fs=&service.fs;
-    UxShellIO io = {0, shell_output, 0, 0};
+    UxShellIO io = {0};
+    io.emit = shell_output;
     int result;
     const UxF5Storage *storage = (const UxF5Storage *)context;
     UxGeo geo;
@@ -95,6 +96,7 @@ int p2001_f5_shell(Pvd *view, void *context)
             io.context = &external;
             io.external = uxexternal_ls;
             io.external_ls = 1;
+            io.pipeline = uxexternal_pipeline;
         }
     }
     if (plan2001_busybox_dispatch(3, echo_args) != 0)

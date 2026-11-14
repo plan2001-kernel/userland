@@ -10,6 +10,10 @@ typedef struct {
     int executable_volume;          /* authorized Vexecute GE/O Handle */
     UxOid executable_oid;           /* identity only */
 } UxExternal;
+int uxexternal_pipeline(void *ctx, char *const *left, unsigned int lcount,
+                        char *const *right, unsigned int rcount,
+                        void *output, unsigned int capacity,
+                        unsigned int *size);
 int uxexternal_ls(void *ctx, const char *command, char *const *argv,
                   unsigned int argc, void *output, unsigned int capacity,
                   unsigned int *size);

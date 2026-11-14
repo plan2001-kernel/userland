@@ -12,6 +12,10 @@ typedef struct {
     int (*external)(void *, const char *, char *const *, unsigned int,
                     void *, unsigned int, unsigned int *);
     int external_ls;
+    /* Optional real SPAWN + UXPIPE two-process pipeline backend. */
+    int (*pipeline)(void *, char *const *, unsigned int,
+                    char *const *, unsigned int,
+                    void *, unsigned int, unsigned int *);
 } UxShellIO;
 int uxshell_eval(UxFs *fs, const char *line, const UxShellIO *io);
 #endif

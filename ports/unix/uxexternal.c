@@ -9,6 +9,7 @@
  */
 #include "uxexternal.h"
 #include "uxspawn.h"
+#include "uxpipe.h"
 #include "obj.h"
 #include "vobj.h"
 
@@ -120,5 +121,105 @@ cleanup:
     if (source_map) (void)obj_region_unmap(source_map);
     if (stdout_region > 0) (void)obj_close(stdout_region);
     if (source > 0) (void)obj_close(source);
+    return status;
+}
+
+/* Native SPAWN/UXPIPE echo | cat. The parent owns four region capabilities,
+ * formats the buffers, unmaps all writers before delegation, and runs two
+ * independent executable instances with attenuated rights. No kernel Unix
+ * pipe, guessed OID or access to the Unix storage volume is introduced.
+ */
+int uxexternal_pipeline(void *ctx, char *const *left, unsigned int lcount,
+                        char *const *right, unsigned int rcount,
+                        void *output, unsigned int capacity,
+                        unsigned int *size)
+{
+    UxExternal *runtime=(UxExternal *)ctx;
+    int h[4]={-1,-1,-1,-1};
+    unsigned long long maps[4]={0,0,0,0};
+    UxPipe receiver;
+    UxLaunch first={0},second={0};
+    char *args[22], *rhs[3]={"busybox","cat",0};
+    int producer=-1,consumer=-1,producer_ok=0,consumer_ok=0,status=-1;
+    unsigned int i,used=0;
+    if(!runtime || !runtime->executable_volume || !runtime->executable_oid ||
+       !left || !right || !output || !size || !capacity ||
+       !lcount || lcount>20 || rcount!=1 ||
+       !equal(left[0],"echo") || !equal(right[0],"cat"))
+        return -1;
+    args[0]="busybox";
+    for(i=0;i<lcount;++i) args[i+1]=left[i];
+    args[lcount+1]=0;
+    for(i=0;i<4;++i) {
+        long mapped;
+        h[i]=(int)obj_region_create(UXPIPE_PAGE,0);
+        if(h[i]<=0) goto cleanup;
+        mapped=obj_region_map(h[i],0);
+        if(mapped<=0) goto cleanup;
+        maps[i]=(unsigned long long)mapped;
+    }
+    if(uxpipe_format((UxPipeData *)maps[0],(UxPipeAck *)maps[1]) ||
+       uxpipe_format((UxPipeData *)maps[2],(UxPipeAck *)maps[3]))
+        goto cleanup;
+    for(i=0;i<4;++i) {
+        if(obj_region_unmap(maps[i])<0) goto cleanup;
+        maps[i]=0;
+    }
+    { long ro=obj_region_map_flags(h[2],0,ObjRegionMapReadonly);
+      if(ro<=0) goto cleanup;
+      maps[2]=(unsigned long long)ro;
+    }
+    { long rw=obj_region_map(h[3],0);
+      if(rw<=0) goto cleanup;
+      maps[3]=(unsigned long long)rw;
+    }
+    if(uxpipe_bind(&receiver,(UxPipeData *)maps[2],(UxPipeAck *)maps[3],
+                   maps[2],maps[3],UXPIPE_READER))
+        goto cleanup;
+    second.executable_volume=runtime->executable_volume;
+    second.oid=runtime->executable_oid;
+    second.grant_count=4;
+    second.grant[0].handle=h[0];second.grant[0].rights=Vread;
+    second.grant[1].handle=h[1];second.grant[1].rights=Vwrite;
+    second.grant[2].handle=h[2];second.grant[2].rights=Vwrite;
+    second.grant[3].handle=h[3];second.grant[3].rights=Vread;
+    consumer=uxspawn_start(&second,rhs,2);
+    if(consumer<=0) goto cleanup;
+    first.executable_volume=runtime->executable_volume;
+    first.oid=runtime->executable_oid;
+    first.grant_count=2;
+    first.grant[0].handle=h[0];first.grant[0].rights=Vwrite;
+    first.grant[1].handle=h[1];first.grant[1].rights=Vread;
+    producer=uxspawn_start(&first,args,(int)lcount+1);
+    if(producer<=0) goto cleanup;
+    for(;;) {
+        unsigned char temp[256];
+        long got=uxpipe_read(&receiver,temp,sizeof(temp),-1);
+        if(got<0) goto cleanup;
+        if(!got) break; /* cat published real EOF */
+        if((unsigned long)got>capacity-used) goto cleanup;
+        for(i=0;i<(unsigned int)got;++i)
+            ((unsigned char *)output)[used+i]=temp[i];
+        used+=(unsigned int)got;
+    }
+    if(uxspawn_wait(producer,EXTERNAL_TIMEOUT_MS,&producer_ok)!=0 ||
+       !producer_ok ||
+       uxspawn_wait(consumer,EXTERNAL_TIMEOUT_MS,&consumer_ok)!=0 ||
+       !consumer_ok) goto cleanup;
+    *size=used;
+    status=0;
+cleanup:
+    if(producer>0) {
+        if(status) (void)obj_process_terminate(producer);
+        (void)obj_close(producer);
+    }
+    if(consumer>0) {
+        if(status) (void)obj_process_terminate(consumer);
+        (void)obj_close(consumer);
+    }
+    for(i=0;i<4;++i) {
+        if(maps[i]) (void)obj_region_unmap(maps[i]);
+        if(h[i]>0) (void)obj_close(h[i]);
+    }
     return status;
 }

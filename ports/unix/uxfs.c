@@ -140,6 +140,7 @@ int uxfs_mkdir(UxFs *fs, const char *path)
     if (rc) return rc;
     bytes(fs->nodes[id].path, resolved, length(resolved)+1);
     fs->nodes[id].kind = UXFS_DIR;
+    fs->dirty = 1;
     return PVD_OK;
 }
 int uxfs_write(UxFs *fs, const char *path, const void *buf,
@@ -167,6 +168,7 @@ int uxfs_write(UxFs *fs, const char *path, const void *buf,
         return PVD_ENOSPC;
     if (size) bytes(fs->data[id]+old, buf, size);
     node->length = old + size;
+    fs->dirty = 1;
     return PVD_OK;
 }
 int uxfs_read(UxFs *fs, const char *path, void *buf,
@@ -201,6 +203,7 @@ int uxfs_remove(UxFs *fs, const char *path)
     if (fs->nodes[id].kind != UXFS_FILE) return PVD_EINVAL;
     zero(&fs->nodes[id], sizeof(UxNode));
     zero(fs->data[id], UXFS_DATA_MAX);
+    fs->dirty = 1;
     return PVD_OK;
 }
 int uxfs_move(UxFs *fs, const char *src, const char *dest)
@@ -224,6 +227,7 @@ int uxfs_move(UxFs *fs, const char *src, const char *dest)
         zero(fs->data[other], UXFS_DATA_MAX);
     }
     bytes(fs->nodes[id].path, b, length(b)+1);
+    fs->dirty = 1;
     return PVD_OK;
 }
 int uxfs_list(UxFs *fs, const char *path, UxEmit emit, void *ctx)
@@ -295,6 +299,7 @@ int uxfs_save(UxFs *fs, const UxStore *s, UxOid manifest)
     if (s->put(s->context, manifest, &disk, sizeof(disk)) ||
         s->commit(s->context))
         return PVD_EIO;
+    fs->dirty = 0;
     return PVD_OK;
 }
 int uxfs_restore(UxFs *fs, const UxStore *s, UxOid manifest)
@@ -344,5 +349,6 @@ int uxfs_restore(UxFs *fs, const UxStore *s, UxOid manifest)
                 return PVD_EIO;
         }
     }
+    target->dirty = 0;
     return PVD_OK;
 }

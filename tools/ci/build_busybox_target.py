@@ -57,7 +57,8 @@ def check_elf(elf: Path, reports: Path, title: str) -> dict:
     if len(loads) != 2:
         raise RuntimeError(f"{title}: expected two PT_LOAD, found {len(loads)}")
     for sym in ("_start", "p9_start", "plan2001_busybox_dispatch",
-                "true_main", "false_main", "echo_main", "p2001_ls_main", "full_write",
+                "true_main", "false_main", "echo_main", "p2001_ls_main", "uxpipe_read",
+                "uxpipe_write", "full_write",
                 "obj_write"):
         if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
             raise RuntimeError(f"{title}: missing symbol {sym}")
@@ -98,7 +99,7 @@ def main() -> None:
     linker = args.kernel / "micropython/gcc/user.ld"
     originals = [args.busybox / path for path in APPLETS.values()]
     inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c", PORT / "session.c",
-              PORT / "main.c", PORT / "ls_child.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
+              PORT / "main.c", PORT / "ls_child.c", PORT / "uxpipe_child.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
               PORT / "f5_shell.c", PORT / "f5_shell.h",
               UNIX / "pvd.c", UNIX / "pvd.h", UNIX / "init.c",
               UNIX / "init.h", UNIX / "uxfs.c", UNIX / "uxfs.h",
@@ -106,6 +107,7 @@ def main() -> None:
               UNIX / "uxshell.c", UNIX / "uxshell.h",
               UNIX / "uxspawn.c", UNIX / "uxspawn.h",
               UNIX / "uxexternal.c", UNIX / "uxexternal.h",
+              UNIX / "uxpipe.c", UNIX / "uxpipe.h",
               runtime / "rt_startup.o",
               runtime / "rt_start.o", runtime / "rt_stubs.o",
               runtime / "rt_misc.o", runtime / "libm_frexp.o",
@@ -136,6 +138,8 @@ def main() -> None:
         "qemu_result": "NOT ASSESSED by build script"}
     try:
         for name, source in {**APPLETS, "ls_child": str(PORT / "ls_child.c"),
+                             "uxpipe_child": str(PORT / "uxpipe_child.c"),
+                             "uxpipe": str(UNIX / "uxpipe.c"),
                              "compat": str(PORT / "compat.c"),
                              "session": str(PORT / "session.c")}.items():
             path = (args.busybox / source if name in APPLETS else Path(source))

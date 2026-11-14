@@ -6,6 +6,7 @@
 #include "f5_shell.h"
 #include "pvd_cli.h"
 #include "../unix/uxshell.h"
+#include "../unix/uxgeo.h"
 
 extern int plan2001_busybox_dispatch(int argc, char **argv);
 
@@ -61,14 +62,23 @@ int p2001_f5_shell(Pvd *view, void *context)
     static UxFs fs;
     UxShellIO io = {0, shell_output, 0, 0};
     int result;
+    const UxF5Storage *storage = (const UxF5Storage *)context;
+    UxGeo geo;
+    UxStore store;
     unsigned int used = 0;
     long n;
-    (void)context;
-
     if (!view || pvd_getcwd(view, root, sizeof(root)) != PVD_OK ||
         root[0] != '/' || root[1] != 0)
         return -1;
     uxfs_init(&fs, view);
+    if (storage) {
+        if (!storage->manifest ||
+            uxgeo_bind(&geo, storage->volume, &store) < 0)
+            return -1;
+        if (storage->restore &&
+            uxfs_restore(&fs, &store, storage->manifest) != PVD_OK)
+            return -1;
+    }
     if (plan2001_busybox_dispatch(3, echo_args) != 0)
         return -1;
     if (write_text("PLAN2001-PVD-READY\n") < 0 ||
@@ -88,6 +98,8 @@ int p2001_f5_shell(Pvd *view, void *context)
                 write_text("\n") < 0)
                 return -1;
             result = uxshell_eval(&fs, line, &io);
+            if (result == PVD_OK && storage && fs.dirty)
+                result = uxfs_save(&fs, &store, storage->manifest);
             if (shell_error(line, result) < 0 || prompt(view) < 0)
                 return -1;
             used = 0;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build freestanding Plan2001 AMD64 BusyBox true/false/echo subset.
+"""Build freestanding Plan2001 AMD64 BusyBox applet and native stream subset.
 
 Builds ORIGINAL pinned upstream applet sources unchanged with a small,
 explicitly scoped Plan2001 libbb/console adapter. This is not a complete
@@ -132,7 +132,7 @@ def main() -> None:
         "applet_sources": list(APPLETS.values()),
         "native_compiler": read([args.cc, "--version"]).splitlines()[0],
         "libc": str(archive),
-        "method": "gcc freestanding native-appcompat applet-subset",
+        "method": "gcc freestanding upstream 3 applets plus Plan2001 ls/pipe",
         "full_upstream_busybox_make": "NOT RUN",
         "linux_host_libc_used_for_target": False,
         "qemu_result": "NOT ASSESSED by build script"}
@@ -201,6 +201,8 @@ def main() -> None:
             "native startup/syscalls and libgcc.\n"
             "- **PASS:** static AMD64 ELF checks, no dynamic interpreter, "
             "no undefined symbols and exactly two PT_LOAD segments.\n"
+            "- **ADD-ONS:** Plan2001-specific native ls and uxpipe sender/receiver "
+            "using explicit capabilities, NOT original BusyBox ls/ash.\\n"
             "- **NOT RUN:** complete upstream BusyBox Makefile/libbb port, "
             "full POSIX semantics or all BusyBox applets.\n"
             "- **NOT RUN here:** QEMU guest execution (separate step).\n"

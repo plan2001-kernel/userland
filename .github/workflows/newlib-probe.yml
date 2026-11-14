@@ -8,12 +8,16 @@ on:
       - 'ports/newlib/**'
       - 'tools/ci/newlib_probe.py'
       - 'tools/ci/guest_newlib.sh'
+      - 'tools/ci/*libgloss*'
+      - 'tests/guest/libgloss*'
   pull_request:
     paths:
       - '.github/workflows/newlib-probe.yml'
       - 'ports/newlib/**'
       - 'tools/ci/newlib_probe.py'
       - 'tools/ci/guest_newlib.sh'
+      - 'tools/ci/*libgloss*'
+      - 'tests/guest/libgloss*'
   workflow_dispatch:
 
 permissions:
@@ -94,6 +98,35 @@ jobs:
             "$RUNNER_TEMP/plan2001-reports/newlib-probe/newlib-plan2001.elf" \
             "$RUNNER_TEMP/plan2001-reports"
 
+      - name: Build native read/write/sbrk/exit libgloss bridge and exit child
+        run: |
+          python3 tools/ci/build_libgloss.py \
+            --kernel "$RUNNER_TEMP/plan2001-sources/kernel" \
+            --reports "$RUNNER_TEMP/plan2001-reports" --cc gcc-14
+
+      - name: Test native libgloss read/write/sbrk under real Plan2001 QEMU
+        run: |
+          bash tools/ci/guest_libgloss.sh \
+            "$RUNNER_TEMP/plan2001-sources/kernel" \
+            "$RUNNER_TEMP/plan2001-reports/libgloss/libgloss-boot.elf" \
+            "$RUNNER_TEMP/plan2001-reports"
+
+      - name: Seed native MicroPython and libgloss exit child into fresh GE/O
+        run: |
+          python3 tools/ci/seed_busybox_spawn.py \
+            --kernel "$RUNNER_TEMP/plan2001-sources/kernel" \
+            --elf "$RUNNER_TEMP/plan2001-reports/libgloss/libgloss-exit.elf" \
+            --init tests/guest/libgloss_exit_init.py \
+            --reports "$RUNNER_TEMP/plan2001-reports" \
+            --image "$RUNNER_TEMP/plan2001-reports/libgloss-exit.img"
+
+      - name: Verify libgloss exit success/failure through Process Handles
+        run: |
+          bash tools/ci/guest_libgloss_exit.sh \
+            "$RUNNER_TEMP/plan2001-sources/kernel" \
+            "$RUNNER_TEMP/plan2001-reports/libgloss-exit.img" \
+            "$RUNNER_TEMP/plan2001-reports"
+
       - name: Summarize real results and limitations
         if: always()
         run: |
@@ -109,9 +142,16 @@ jobs:
             else
               echo 'Real Plan2001 QEMU execution: **NOT COMPLETED**.'
             fi
+            for name in libgloss-build.md libgloss-guest.md libgloss-exit.md; do
+              if [ -f "$RUNNER_TEMP/plan2001-reports/$name" ]; then
+                cat "$RUNNER_TEMP/plan2001-reports/$name"
+              else
+                echo "$name: **NOT COMPLETED**."
+              fi
+            done
             echo
-            echo '**Not tested:** full Newlib, newlib-nano, libgloss, POSIX I/O,'
-            echo 'BusyBox with Newlib, ABI-wide compatibility or physical hardware.'
+            echo '**Not tested:** full Newlib/newlib-nano, full libc replacement,'
+            echo 'generic POSIX files/TTY, BusyBox linked with Newlib, physical hardware.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload native Newlib ELF and CI evidence
@@ -128,5 +168,17 @@ jobs:
             ${{ runner.temp }}/plan2001-reports/newlib-guest.md
             ${{ runner.temp }}/plan2001-reports/qemu-newlib/*.log
             ${{ runner.temp }}/plan2001-reports/qemu-newlib/*.json
+            ${{ runner.temp }}/plan2001-reports/libgloss/*.elf
+            ${{ runner.temp }}/plan2001-reports/libgloss/*.txt
+            ${{ runner.temp }}/plan2001-reports/libgloss/*.json
+            ${{ runner.temp }}/plan2001-reports/libgloss-build.log
+            ${{ runner.temp }}/plan2001-reports/libgloss-build.md
+            ${{ runner.temp }}/plan2001-reports/libgloss-guest.md
+            ${{ runner.temp }}/plan2001-reports/libgloss-exit.md
+            ${{ runner.temp }}/plan2001-reports/qemu-libgloss/*.log
+            ${{ runner.temp }}/plan2001-reports/qemu-libgloss/*.json
+            ${{ runner.temp }}/plan2001-reports/qemu-libgloss-exit/*.log
+            ${{ runner.temp }}/plan2001-reports/qemu-libgloss-exit/*.json
+            ${{ runner.temp }}/plan2001-reports/*spawn*.json
           if-no-files-found: warn
           retention-days: 14

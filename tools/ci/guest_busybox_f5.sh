@@ -53,7 +53,7 @@ required=true
 [process.unixInitF5]
 source=geo:PARTUUID=$puuid:OID=0x4f45584543000005
 owner=unixSupervisorF5
-args=0x4f45584543000006
+args=unix-supervisor 0x4f45584543000006
 required=true
 EOF
 qob_make_esp "$OUT/plan9.ini" "$OUT/esp.img"

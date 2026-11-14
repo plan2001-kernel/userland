@@ -143,6 +143,16 @@ long region_wake(unsigned long long base, unsigned long long off,
 void p9_full_unbind_uxpipe(void)
 {
     unsigned i;
+    /* A normal unbind must publish EOF/disconnect before releasing the
+     * writer mapping; disappearing region writers are not protocol EOF. */
+    if(proxy_bound) {
+        for(i = 0; i < 3; ++i) {
+            if(!proxy_closed[i]) {
+                (void)uxpipe_finish(&proxy[i]);
+                proxy_closed[i] = 1;
+            }
+        }
+    }
     for(i = 0; i < 6; ++i) {
         if(proxy_maps[i]) {
             (void)p9_full_region_unmap(proxy_maps[i]);
@@ -447,6 +457,18 @@ void *_sbrk(ptrdiff_t increment)
 
 _Noreturn void _exit(int code)
 {
+    unsigned i;
+    /* Newlib exit() flushes stdio before entering this native primitive.
+     * Publish explicit UXPIPE close for any still-open descriptor so a
+     * successful process exit never looks like a broken region writer. */
+    if(proxy_bound) {
+        for(i = 0; i < 3; ++i) {
+            if(!proxy_closed[i]) {
+                (void)uxpipe_finish(&proxy[i]);
+                proxy_closed[i] = 1;
+            }
+        }
+    }
     /* EXITS preserves success/failure, not the exact numeric Unix code. */
     _exits(code == 0 ? "" : "error");
     __builtin_unreachable();

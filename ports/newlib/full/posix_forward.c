@@ -22,16 +22,16 @@ extern int _isatty(int);
 extern int _getpid(void);
 extern int _kill(int, int);
 
-ssize_t read(int fd, void *buf, size_t count)
+int read(int fd, void *buf, size_t count)
 {
     if(count > INT_MAX) { errno = EINVAL; return -1; }
-    return (ssize_t)_read(fd, (char *)buf, (int)count);
+    return _read(fd, (char *)buf, (int)count);
 }
 
-ssize_t write(int fd, const void *buf, size_t count)
+int write(int fd, const void *buf, size_t count)
 {
     if(count > INT_MAX) { errno = EINVAL; return -1; }
-    return (ssize_t)_write(fd, (const char *)buf, (int)count);
+    return _write(fd, (const char *)buf, (int)count);
 }
 
 int close(int fd)

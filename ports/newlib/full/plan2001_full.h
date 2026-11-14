@@ -11,6 +11,9 @@ long p9_full_region_close(int handle);
 int p9_full_bind_files(UxService *service);
 void p9_full_unbind_files(void);
 int p9_full_bind_uxpipe(const int region_handles[6]);
+/* Enumerate and validate six exact Oinheritv stream grants + Vexecute.
+ * No implicit console, OID, or arbitrary writable-region fallback. */
+int p9_full_bind_inherited_uxpipe(void);
 void p9_full_unbind_uxpipe(void);
 int p9_full_bind_stdin(int region_handle);
 void p9_full_unbind_stdin(void);

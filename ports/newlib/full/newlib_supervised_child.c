@@ -64,6 +64,10 @@ int main(int argc, char **argv)
         return failure("stdin payload corrupted");
     if(report(1, reply))
         return failure("stdin acknowledgement");
+    /* Retain the F5 display while the QEMU monitor reads its pixels.
+     * The supervisor closes the session when the child completes; without
+     * this hold the final output can vanish before the VGA assertion. */
+    (void)sleep(8);
     /* Explicitly publish EOF on both output streams before exiting.
      * A disappeared writer mapping is NOT a valid substitute for EOF. */
     if(close(0) != 0 || close(1) != 0 || close(2) != 0)

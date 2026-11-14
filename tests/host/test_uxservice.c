@@ -40,7 +40,7 @@ int main(void)
     assert(uxservice_command(&service,"echo beta >> /tmp/shared",&io)==0);
     fb=uxfd_open(&b,"/tmp/shared",UXFD_READ);
     assert(uxfd_read(&b,fb,buf,11)==10);
-    assert(!memcmp(buf,"alphabeta\\n",10));
+    assert(!memcmp(buf,"alphabeta\n",10));
     assert(uxfd_close(&b,fb)==0);
     assert(uxfd_unlink(&a,"/tmp/shared")==0);
     assert(uxfd_open(&b,"/tmp/shared",UXFD_READ)==PVD_ENOENT);

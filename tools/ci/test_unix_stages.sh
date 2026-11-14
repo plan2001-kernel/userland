@@ -58,9 +58,9 @@ case "$STAGE" in
       "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
       "$ROOT/ports/unix/uxshell.c" -o "$OUT/uxshell"
     "$OUT/uxshell"
-    "$CC" "${BASE[@]}" "$ROOT/tests/host/test_uxservice.c" \\
-      "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \\
-      "$ROOT/ports/unix/uxshell.c" "$ROOT/ports/unix/uxservice.c" \\
+    "$CC" "${BASE[@]}" "$ROOT/tests/host/test_uxservice.c" \
+      "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
+      "$ROOT/ports/unix/uxshell.c" "$ROOT/ports/unix/uxservice.c" \
       "$ROOT/ports/unix/uxfd.c" -o "$OUT/uxservice"
     "$OUT/uxservice"
     "$CC" "${BASE[@]}" -pthread \

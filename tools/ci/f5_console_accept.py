@@ -136,14 +136,14 @@ try:
 
     if mode == "persist-reboot":
         enter("cat /tmp/persisted")
-        waitscreen("geo-restored-cat", "\\nGEOPERSIST2026\\nunix:/$")
+        waitscreen("geo-restored-cat", "\npersist2026\nunix:/$")
         enter("ls /tmp")
         waitscreen("geo-restored-list", "persisted")
         print("PASS: real GE/O manifest and file restored across fresh QEMU boot")
     elif mode == "persist-initial":
-        enter("echo GEOPERSIST2026 > /tmp/persisted")
+        enter("echo persist2026 > /tmp/persisted")
         enter("cat /tmp/persisted")
-        waitscreen("geo-firstboot-cat", "\\nGEOPERSIST2026\\nunix:/$")
+        waitscreen("geo-firstboot-cat", "\npersist2026\nunix:/$")
         print("PASS: real GE/O file committed via delegated storage grant")
     elif mode == "reboot":
         # This is a second cold QEMU process with the SAME GE/O disk image.

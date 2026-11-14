@@ -19,6 +19,7 @@ extern int _fstat(int fd, struct stat *st);
 extern int _open(const char *path, int flags, ...);
 extern void _exit(int status);
 extern int _read(int fd, char *buf, int count);
+extern off_t _lseek(int fd, off_t offset, int whence);
 extern void *_sbrk(ptrdiff_t change);
 
 static void check(int predicate, const char *what)
@@ -86,7 +87,7 @@ static void check_uxpipe(void)
     p9_full_unbind_uxpipe();
     for(i=0;i<6;++i)
         check(p9_full_region_close(handles[i])==0,"close UXPIPE handle");
-    printf("PLAN2001-NEWLIB-FULL-UXPIPE-PASS\\n");
+    printf("PLAN2001-NEWLIB-FULL-UXPIPE-PASS\n");
     fflush(stdout);
 }
 
@@ -179,6 +180,7 @@ int main(int argc, char **argv)
     printf("PLAN2001-NEWLIB-FULL-STDIN-PASS\n");
     fflush(stdout);
 
+    check_uxpipe();
     printf("PLAN2001-NEWLIB-FULL-PASS\n");
     fflush(stdout);
     for(;;)

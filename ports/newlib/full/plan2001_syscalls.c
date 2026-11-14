@@ -157,8 +157,7 @@ int p9_full_bind_uxpipe(const int handles[6])
 {
     unsigned i;
     if(!handles) { errno = EINVAL; return -1; }
-    if(proxy_bound || read_base || console_closed[0] || console_closed[1] ||
-       console_handles[0] >= 0 || console_handles[1] >= 0) {
+    if(proxy_bound || read_base || console_closed[0] || console_closed[1]) {
         errno = EBUSY; return -1;
     }
     for(i = 0; i < 6; ++i) {

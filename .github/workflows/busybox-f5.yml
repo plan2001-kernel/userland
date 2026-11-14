@@ -68,18 +68,19 @@ jobs:
           tools/build-mpy-gcc.sh -j 4
           tools/build.sh
 
-      - name: Link native Unix init and embedded F5 shell with BusyBox applets
+      - name: Link native Unix supervisor, separate Unix init child, and BusyBox applets
         run: |
           python3 tools/ci/build_busybox_target.py \
             --kernel "${{ runner.temp }}/plan2001-sources/kernel" \
             --busybox "${{ runner.temp }}/plan2001-sources/busybox" \
             --reports "${{ runner.temp }}/plan2001-reports" --cc gcc-14
 
-      - name: Seed disposable GE/O with MicroPython and native Unix init F5 ELF
+      - name: Seed disposable GE/O with supervisor and independent Unix child ELFs
         run: |
           python3 tools/ci/seed_busybox_spawn.py \
             --kernel "${{ runner.temp }}/plan2001-sources/kernel" \
-            --elf "${{ runner.temp }}/plan2001-reports/busybox-target/unix-init-f5-plan2001.elf" \
+            --elf "${{ runner.temp }}/plan2001-reports/busybox-target/unix-supervisor-f5-plan2001.elf" \
+            --extra-elf "${{ runner.temp }}/plan2001-reports/busybox-target/unix-init-f5-plan2001.elf" \
             --init tests/guest/busybox_spawn_init.py \
             --image "${{ runner.temp }}/plan2001-reports/busybox-f5-o.img" \
             --reports "${{ runner.temp }}/plan2001-reports"
@@ -102,7 +103,8 @@ jobs:
               printf '\n**NOT COMPLETED:** %s\n' "$report" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
-          echo 'NOT RUN: external shell SPAWN, persistent GE/O directories, BusyBox ash/sh, full POSIX tty, hardware.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'QEMU F5: supervisor boots as manifest process, delegates six stream regions and restricted Vexecute to an independent Unix child.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'NOT RUN: writable F5 storage grant (requires pre-provisioned manifest), BusyBox ash/sh, full POSIX tty, hardware.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload native F5 guest proof (no disk images)
         if: always()

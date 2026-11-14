@@ -78,7 +78,8 @@ def focus(number):
 
 
 def enter(line):
-    specials = {" ": "spc", "/": "slash", ".": "dot"}
+    specials = {" ": "spc", "/": "slash", ".": "dot",
+                ">": "shift-dot", "|": "shift-backslash"}
     for letter in line:
         key(specials.get(letter, letter))
     key("ret")
@@ -127,6 +128,7 @@ try:
     waitscreen("system-boot", "kernel>", 120)
     focus(5)
     ready = waitscreen("f5-init-handoff", "PLAN2001-UNIX-SHELL-READY")
+    assert "PLAN2001-UNIX-SUPERVISOR-READY" in ready
     assert "PLAN2001-UNIX-INIT-ROOT:/" in ready
     assert "PLAN2001-PVD-READY" in ready
     assert "PLAN2001-BUSYBOX-F5-READY" in ready
@@ -160,6 +162,17 @@ try:
         waitscreen("pvd-pwd-root", "\n/\nunix:/$")
         enter("ls")
         waitscreen("pvd-ls-root", "\nbin\ndev\netc\nhome\ntmp\nusr\nvar\n")
+        # The manifest boots the trusted supervisor (first SPAWN); the
+        # shell's ls request must start a second native child rather than
+        # quietly using the in-process fallback. Both use the same seeded
+        # child ELF OID, but separate kernel Process Handles.
+        spawns = re.findall(
+            r"o: SPAWN pid=\d+ handle=\d+ oid=0x4f45584543000006\b",
+            serial.read_text(errors="replace"))
+        assert len(spawns) >= 2, (
+            "F5 ls did not execute as a second native SPAWN process: "
+            + str(spawns)
+        )
         enter("cd /usr/bin")
         enter("pwd")
         waitscreen("pvd-pwd-bin", "\n/usr/bin\nunix:/usr/bin$")
@@ -173,6 +186,25 @@ try:
         enter("cd ../../../../")
         enter("pwd")
         waitscreen("pvd-root-confined", "\n/\nunix:/$")
+        # Stage 4/7: these new paths and redirections execute inside the
+        # actual F5 native ELF, with QEMU PS/2 keys and framebuffer output.
+        enter("echo test > /tmp/file")
+        enter("cat /tmp/file")
+        waitscreen("uxfs-redirection-cat", "\ntest\nunix:/$")
+        enter("echo more >> /tmp/file")
+        enter("cat /tmp/file")
+        waitscreen("uxfs-append-cat", "\ntest\nmore\nunix:/$")
+        enter("cat /tmp/file | cat")
+        waitscreen("uxfs-pipeline-cat", "\ntest\nmore\nunix:/$")
+        enter("mkdir /tmp/newdir")
+        enter("cp /tmp/file /tmp/newdir/copy")
+        enter("mv /tmp/newdir/copy /tmp/newdir/moved")
+        enter("cat /tmp/newdir/moved")
+        waitscreen("uxfs-copy-move-cat", "\ntest\nmore\nunix:/$")
+        enter("rm /tmp/newdir/moved")
+        enter("cat /tmp/newdir/moved")
+        waitscreen("uxfs-rm-denies", "cat: no such directory")
+
         # End boot 1 in a non-root directory, verified before stopping QEMU.
         enter("cd /usr/bin")
         enter("pwd")

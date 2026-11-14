@@ -5,6 +5,9 @@
 #include "libbb.h"
 #include "f5_shell.h"
 #include "pvd_cli.h"
+#include "../unix/uxshell.h"
+#include "../unix/uxgeo.h"
+#include "../unix/uxexternal.h"
 
 extern int plan2001_busybox_dispatch(int argc, char **argv);
 
@@ -18,6 +21,27 @@ static int write_text(const char *text)
     return write_bytes(text, strlen(text));
 }
 
+static int shell_output(void *unused, const void *data, unsigned int size)
+{
+    (void)unused;
+    return write_bytes((const char *)data, size);
+}
+static int shell_error(const char *line, int status)
+{
+    const char *start = line;
+    const char *end;
+    if (status == PVD_OK) return 0;
+    while (*start == ' ' || *start == '\t') ++start;
+    end = start;
+    while (*end && *end != ' ' && *end != '\t' &&
+           *end != '|' && *end != '>') ++end;
+    if (end == start) start = "command", end = start + 7;
+    if (write_bytes(start, (size_t)(end-start)) < 0 ||
+        write_text(": ") < 0 ||
+        write_text(pvd_error(status)) < 0 ||
+        write_text("\n") < 0) return -1;
+    return 0;
+}
 static int prompt(const Pvd *view)
 {
     char path[PVD_PATH_MAX];
@@ -36,13 +60,43 @@ int p2001_f5_shell(Pvd *view, void *context)
     };
     char line[128], root[2], ch;
     static const char read_marker[] = "PLAN2001-BUSYBOX-F5-READ:";
+    static UxFs fs;
+    UxShellIO io = {0, shell_output, 0, 0};
+    int result;
+    const UxF5Storage *storage = (const UxF5Storage *)context;
+    UxGeo geo;
+    UxStore store;
+    UxExternal external;
+    int persistent = 0;
     unsigned int used = 0;
     long n;
-    (void)context;
-
     if (!view || pvd_getcwd(view, root, sizeof(root)) != PVD_OK ||
         root[0] != '/' || root[1] != 0)
         return -1;
+    uxfs_init(&fs, view);
+    if (storage) {
+        if (!!storage->executable_volume != !!storage->executable_oid)
+            return -1; /* no incomplete authority context */
+        if (!!storage->volume != !!storage->manifest ||
+            (storage->restore && !storage->manifest))
+            return -1;
+        if (storage->manifest) {
+            if (uxgeo_bind(&geo, storage->volume, &store) < 0)
+                return -1;
+            persistent = 1;
+            if (storage->restore &&
+                uxfs_restore(&fs, &store, storage->manifest) != PVD_OK)
+                return -1;
+        }
+        if (storage->executable_volume) {
+            external.fs = &fs;
+            external.executable_volume = storage->executable_volume;
+            external.executable_oid = storage->executable_oid;
+            io.context = &external;
+            io.external = uxexternal_ls;
+            io.external_ls = 1;
+        }
+    }
     if (plan2001_busybox_dispatch(3, echo_args) != 0)
         return -1;
     if (write_text("PLAN2001-PVD-READY\n") < 0 ||
@@ -61,7 +115,10 @@ int p2001_f5_shell(Pvd *view, void *context)
                 write_bytes(line, used) < 0 ||
                 write_text("\n") < 0)
                 return -1;
-            if (pvd_cli_run(view, line) < 0 || prompt(view) < 0)
+            result = uxshell_eval(&fs, line, &io);
+            if (result == PVD_OK && persistent && fs.dirty)
+                result = uxfs_save(&fs, &store, storage->manifest);
+            if (shell_error(line, result) < 0 || prompt(view) < 0)
                 return -1;
             used = 0;
         } else if (ch == 8 || ch == 127) {

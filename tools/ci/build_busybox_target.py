@@ -56,10 +56,14 @@ def check_elf(elf: Path, reports: Path, title: str) -> dict:
     loads = re.findall(r"(?m)^\s*LOAD\s+", phdr)
     if len(loads) != 2:
         raise RuntimeError(f"{title}: expected two PT_LOAD, found {len(loads)}")
-    for sym in ("_start", "p9_start", "plan2001_busybox_dispatch",
+    symbols = (("_start", "p9_start", "uxsupervisor_run",
+                "uxspawn_start", "p2001_session_try_read", "uxpipe_read")
+               if title == "unix-supervisor-f5-plan2001" else
+               ("_start", "p9_start", "plan2001_busybox_dispatch",
                 "true_main", "false_main", "echo_main", "p2001_ls_main", "uxpipe_read",
                 "uxpipe_write", "full_write",
-                "obj_write"):
+                "obj_write"))
+    for sym in symbols:
         if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
             raise RuntimeError(f"{title}: missing symbol {sym}")
     if title == "unix-init-f5-plan2001":
@@ -101,6 +105,8 @@ def main() -> None:
     inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c", PORT / "session.c",
               PORT / "main.c", PORT / "ls_child.c", PORT / "uxpipe_child.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
               PORT / "f5_shell.c", PORT / "f5_shell.h",
+              UNIX / "supervisor.c", UNIX / "supervisor.h",
+              UNIX / "supervisor_main.c",
               UNIX / "pvd.c", UNIX / "pvd.h", UNIX / "init.c",
               UNIX / "init.h", UNIX / "uxfs.c", UNIX / "uxfs.h",
               UNIX / "uxgeo.c", UNIX / "uxgeo.h",
@@ -156,18 +162,22 @@ def main() -> None:
                              ("uxgeo", UNIX / "uxgeo.c"),
                              ("uxshell", UNIX / "uxshell.c"),
                              ("uxspawn", UNIX / "uxspawn.c"),
-                             ("uxexternal", UNIX / "uxexternal.c")):
+                             ("uxexternal", UNIX / "uxexternal.c"),
+                             ("supervisor", UNIX / "supervisor.c")):
             obj = build / f"{name}.o"
             logged(common + ["-c", str(source), "-o", str(obj)], log)
             pvd_objects.append(obj)
 
         for label, mode in (("busybox-plan2001", "standard"),
                             ("busybox-smoke-plan2001", "smoke"),
-                            ("unix-init-f5-plan2001", "f5")):
+                            ("unix-init-f5-plan2001", "f5"),
+                            ("unix-supervisor-f5-plan2001", "supervisor")):
             launcher = build / ("main-" + mode + ".o")
             flags = (["-DPLAN2001_BUSYBOX_GUEST_SMOKE=1"] if mode == "smoke"
                      else ["-DPLAN2001_BUSYBOX_F5=1"] if mode == "f5" else [])
-            logged(common + flags + ["-c", str(PORT / "main.c"),
+            logged(common + flags + ["-c", str(UNIX / "supervisor_main.c"
+                                                    if mode == "supervisor"
+                                                    else PORT / "main.c"),
                                      "-o", str(launcher)], log)
             elf = build / (label + ".elf")
             link = [
@@ -178,8 +188,11 @@ def main() -> None:
                 "-o", str(elf), str(runtime / "rt_startup.o"),
                 str(runtime / "rt_start.o"), str(runtime / "rt_misc.o"),
                 str(launcher),
-                *map(str, objects),
-                *(map(str, pvd_objects) if mode == "f5" else ()),
+                *(map(str, [build / "session.o", build / "uxpipe.o"])
+                  if mode == "supervisor" else map(str, objects)),
+                *(map(str, pvd_objects) if mode == "f5" else
+                  map(str, [build / "uxspawn.o", build / "supervisor.o"])
+                  if mode == "supervisor" else ()),
                 str(runtime / "rt_stubs.o"),
                 str(runtime / "libm_frexp.o"),
                 str(runtime / "libm_ldexp.o"),
@@ -197,7 +210,8 @@ def main() -> None:
             "- **PASS:** upstream BusyBox 1.36.1 `true.c`, `false.c`, "
             "and `echo.c` compiled unchanged with freestanding GCC.\n"
             "- **PASS:** linked a limited Plan2001 native multicall ELF "
-            "a guest-smoke ELF, and the F5 unix-init/shell ELF using native libc, "
+            "a guest-smoke ELF, the F5 unix-init/shell ELF and the trusted "
+            "F5 Unix supervisor ELF using native libc, "
             "native startup/syscalls and libgcc.\n"
             "- **PASS:** static AMD64 ELF checks, no dynamic interpreter, "
             "no undefined symbols and exactly two PT_LOAD segments.\n"
@@ -206,7 +220,7 @@ def main() -> None:
             "- **NOT RUN:** complete upstream BusyBox Makefile/libbb port, "
             "full POSIX semantics or all BusyBox applets.\n"
             "- **NOT RUN here:** QEMU guest execution (separate step).\n"
-            "\nThree target ELF images are stored in the **runner scratch "
+            "\nFour target ELF images are stored in the **runner scratch "
             "build tree** and are not shipped as Linux binaries. The "
             "source files and BSD/GPL provenance remain pinned.\n",
             encoding="utf-8")

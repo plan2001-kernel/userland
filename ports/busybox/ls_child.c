@@ -41,9 +41,9 @@ int p2001_ls_main(int argc, char **argv)
     if (addr < 0) return 1;
     base = (unsigned long long)addr;
     image = (const unsigned char *)base;
-    for (i = 0; i < 8; ++i)
-        length |= ((unsigned long long)image[i]) << (8u * i);
-    if (!length || length > LS_DATA_BYTES) {
+    length = __atomic_load_n((const unsigned long long *)image,
+                              __ATOMIC_ACQUIRE);
+    if (length > LS_DATA_BYTES) {
         (void)obj_region_unmap(base);
         return 1;
     }
@@ -61,8 +61,8 @@ int p2001_ls_main(int argc, char **argv)
             return 1;
         }
     }
-    if (image[8+length-1] != '\n' ||
-        full_write(1, image+8, (size_t)length) != (ssize_t)length) {
+    if (length && (image[8+length-1] != '\n' ||
+        full_write(1, image+8, (size_t)length) != (ssize_t)length)) {
         (void)obj_region_unmap(base);
         return 1;
     }

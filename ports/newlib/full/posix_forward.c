@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 extern int _read(int, char *, int);
@@ -88,4 +89,14 @@ unsigned int sleep(unsigned int seconds)
         remaining -= chunk;
     }
     return 0;
+}
+
+/* Newlib's public time adapter uses the direct Plan2001 _NSEC(53)
+ * implementation, never Linux's host gettimeofday system call.
+ */
+extern int _gettimeofday(struct timeval *, void *);
+
+int gettimeofday(struct timeval *tv, void *timezone)
+{
+    return _gettimeofday(tv, timezone);
 }

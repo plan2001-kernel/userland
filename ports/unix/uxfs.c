@@ -156,6 +156,9 @@ int uxfs_write(UxFs *fs, const char *path, const void *buf,
     if (id < 0) {
         rc = parent_ok(fs, resolved);
         if (rc) return rc;
+        /* Check payload size before exposing a new entry. Failed writes
+         * cannot create a phantom zero-length file. */
+        if (size > UXFS_DATA_MAX) return PVD_ENOSPC;
         id = free_node(fs);
         if (id < 0) return PVD_ENOSPC;
         bytes(fs->nodes[id].path, resolved, length(resolved)+1);
@@ -168,6 +171,7 @@ int uxfs_write(UxFs *fs, const char *path, const void *buf,
         return PVD_ENOSPC;
     if (size) bytes(fs->data[id]+old, buf, size);
     node->length = old + size;
+    fs->modified[id] = 1;
     fs->dirty = 1;
     return PVD_OK;
 }
@@ -203,6 +207,7 @@ int uxfs_remove(UxFs *fs, const char *path)
     if (fs->nodes[id].kind != UXFS_FILE) return PVD_EINVAL;
     zero(&fs->nodes[id], sizeof(UxNode));
     zero(fs->data[id], UXFS_DATA_MAX);
+    fs->modified[id] = 0;
     fs->dirty = 1;
     return PVD_OK;
 }
@@ -225,6 +230,7 @@ int uxfs_move(UxFs *fs, const char *src, const char *dest)
     if (other >= 0) {
         zero(&fs->nodes[other], sizeof(UxNode));
         zero(fs->data[other], UXFS_DATA_MAX);
+        fs->modified[other] = 0;
     }
     bytes(fs->nodes[id].path, b, length(b)+1);
     fs->dirty = 1;
@@ -278,77 +284,146 @@ static UxOid hash(const void *data, unsigned long n)
     while (n--) { h ^= *p++; h *= 1099511628211ULL; }
     return h;
 }
+/* Copy-on-write persistence: never replace the object named by a published
+ * manifest until its successor has committed. GE/O create may commit an
+ * orphan OID early; orphan reclamation is separate from publish atomicity.
+ * The caller's dirty flags and OIDs change only after final commit.
+ */
 int uxfs_save(UxFs *fs, const UxStore *s, UxOid manifest)
 {
     UxManifest disk;
-    unsigned int i;
+    unsigned int i, j;
     if (!fs || !s || !manifest || !s->create || !s->put || !s->commit)
         return PVD_EINVAL;
-    for (i = 0; i < UXFS_NODES; ++i) {
-        UxNode *n = &fs->nodes[i];
-        if (n->kind != UXFS_FILE) continue;
-        if (!n->oid && s->create(s->context, &n->oid)) return PVD_EIO;
-        if (!n->oid || s->put(s->context, n->oid, fs->data[i], n->length))
-            return PVD_EIO;
-    }
+    if (!fs->dirty) return PVD_OK;
     zero(&disk, sizeof(disk));
     disk.magic = UXFS_MAGIC;
     disk.version = UXFS_VERSION;
     bytes(disk.nodes, fs->nodes, sizeof(disk.nodes));
+    for (i = 0; i < UXFS_NODES; ++i) {
+        UxNode *n = &disk.nodes[i];
+        UxOid fresh = 0;
+        if (n->kind != UXFS_FILE) continue;
+        if (!n->oid || fs->modified[i]) {
+            if (s->create(s->context, &fresh) || !fresh || fresh == manifest)
+                return PVD_EIO;
+            /* OIDs are identity only. Reject backend allocation collisions
+             * before staging writes to another file or the manifest. */
+            for (j = 0; j < UXFS_NODES; ++j)
+                if (j != i && disk.nodes[j].kind == UXFS_FILE &&
+                    disk.nodes[j].oid == fresh)
+                    return PVD_EIO;
+            n->oid = fresh;
+            if (s->put(s->context, fresh, fs->data[i], n->length))
+                return PVD_EIO;
+        }
+    }
     disk.checksum = hash(&disk, sizeof(disk)-sizeof(disk.checksum));
     if (s->put(s->context, manifest, &disk, sizeof(disk)) ||
         s->commit(s->context))
         return PVD_EIO;
+    for (i = 0; i < UXFS_NODES; ++i) {
+        fs->nodes[i].oid = disk.nodes[i].oid;
+        fs->modified[i] = 0;
+    }
     fs->dirty = 0;
     return PVD_OK;
 }
+
+/* Deserialization is failure-atomic w.r.t. the visible PVD and file view.
+ * Stage every directory and file independently; only publish after all
+ * metadata, parent links and explicitly authorized GE/O reads validate.
+ * Scratch space is static to avoid an >80 KiB userspace stack frame.
+ * The initial F5 owner is single threaded; this function is NOT reentrant.
+ */
 int uxfs_restore(UxFs *fs, const UxStore *s, UxOid manifest)
 {
+    static UxFs staged;
+    static Pvd staged_view;
+    static const char *const boot[] = {
+        "/", "/bin", "/dev", "/etc", "/home", "/tmp",
+        "/usr", "/usr/bin", "/var"
+    };
     UxManifest disk;
-    Pvd *view;
-    UxFs *target = fs;
-    unsigned int n, i, j;
+    char canonical[PVD_PATH_MAX];
+    unsigned int n, i, j, round, built;
     int rc;
     if (!fs || !fs->view || !s || !s->get || !manifest)
         return PVD_EINVAL;
     if (s->get(s->context, manifest, &disk, sizeof(disk), &n) ||
         n != sizeof(disk) || disk.magic != UXFS_MAGIC ||
-        disk.version != UXFS_VERSION ||
+        disk.version != UXFS_VERSION || disk.reserved != 0 ||
         disk.checksum != hash(&disk, sizeof(disk)-sizeof(disk.checksum)))
         return PVD_EIO;
-    /* Validate entire metadata before changing the live view. */
     if (disk.nodes[0].kind != UXFS_DIR ||
         !same(disk.nodes[0].path, "/")) return PVD_EIO;
+    if (pvd_bootstrap(&staged_view) != PVD_OK) return PVD_EIO;
+    uxfs_init(&staged, &staged_view);
+    bytes(staged.nodes, disk.nodes, sizeof(disk.nodes));
     for (i = 0; i < UXFS_NODES; ++i) {
-        UxNode *p = &disk.nodes[i];
-        if (p->kind == 0) continue;
+        UxNode *p = &staged.nodes[i];
+        if (!p->kind) continue;
         if (p->kind != UXFS_DIR && p->kind != UXFS_FILE) return PVD_EIO;
-        if (length(p->path) >= PVD_PATH_MAX ||
-            p->path[0] != '/' || p->length > UXFS_DATA_MAX ||
-            (p->kind == UXFS_FILE && !p->oid)) return PVD_EIO;
-        for (j = 0; j < i; ++j)
-            if (disk.nodes[j].kind && same(p->path, disk.nodes[j].path))
-                return PVD_EAMBIG;
-    }
-    /* All restored file bytes must be authorized and present, or fail.
-     * Preserve live state on error by staging into the caller's FS object
-     * only after validating metadata; subsequent read errors are reported.
-     */
-    view = target->view;
-    uxfs_init(target, view);
-    bytes(target->nodes, disk.nodes, sizeof(disk.nodes));
-    for (i = 0; i < UXFS_NODES; ++i) {
-        UxNode *p = &target->nodes[i];
-        if (p->kind == UXFS_DIR && i > 0) {
-            rc = pvd_mkdir_memory(view, p->path);
-            if (rc != PVD_OK && rc != PVD_EEXIST) return PVD_EIO;
+        if (length(p->path) >= PVD_PATH_MAX || p->path[0] != '/' ||
+            uxfs_path(&staged, p->path, canonical) != PVD_OK ||
+            !same(p->path, canonical)) return PVD_EIO;
+        if (p->kind == UXFS_DIR) {
+            if (p->oid || p->length) return PVD_EIO;
+        } else if (p->length > UXFS_DATA_MAX || !p->oid ||
+                   p->oid == manifest) return PVD_EIO;
+        if (i && !same(p->path, "/") &&
+            parent_ok(&staged, p->path) != PVD_OK) return PVD_EIO;
+        for (j = 0; j < i; ++j) {
+            if (staged.nodes[j].kind &&
+                same(p->path, staged.nodes[j].path)) return PVD_EAMBIG;
+            if (p->kind == UXFS_FILE &&
+                staged.nodes[j].kind == UXFS_FILE &&
+                p->oid == staged.nodes[j].oid) return PVD_EAMBIG;
         }
-        if (p->kind == UXFS_FILE) {
-            if (s->get(s->context, p->oid, target->data[i],
+    }
+    /* Preserve the fixed Unix init directories, including /usr/bin. */
+    for (i = 0; i < sizeof(boot)/sizeof(boot[0]); ++i)
+        if ((rc = find(&staged, boot[i])) < 0 ||
+            staged.nodes[rc].kind != UXFS_DIR)
+            return PVD_EIO;
+    /* The serialized directory order is arbitrary, so build parents first.
+     * No partial PVD reaches the caller on failure.
+     */
+    for (round = 0; round < PVD_MAX_DEPTH; ++round) {
+        built = 0;
+        for (i = 1; i < UXFS_NODES; ++i) {
+            UxNode *p = &staged.nodes[i];
+            if (p->kind != UXFS_DIR) continue;
+            rc = pvd_mkdir_memory(&staged_view, p->path);
+            if (rc == PVD_OK) ++built;
+            else if (rc != PVD_EEXIST && rc != PVD_ENOENT)
+                return PVD_EIO;
+        }
+        if (!built) break;
+    }
+    for (i = 0; i < UXFS_NODES; ++i) {
+        UxNode *p = &staged.nodes[i];
+        if (p->kind == UXFS_DIR) {
+            unsigned int depthstack[PVD_MAX_DEPTH], d;
+            /* Directory must be reachable through PVD, not merely named
+             * in untrusted metadata. chdir on scratch provides validation.
+             */
+            (void)depthstack;
+            (void)d;
+            if (pvd_chdir(&staged_view, p->path) != PVD_OK)
+                return PVD_EIO;
+            if (pvd_chdir(&staged_view, "/") != PVD_OK)
+                return PVD_EIO;
+        } else if (p->kind == UXFS_FILE) {
+            if (s->get(s->context, p->oid, staged.data[i],
                        UXFS_DATA_MAX, &n) || n != p->length)
                 return PVD_EIO;
         }
     }
-    target->dirty = 0;
+    bytes(fs->nodes, staged.nodes, sizeof(fs->nodes));
+    bytes(fs->data, staged.data, sizeof(fs->data));
+    zero(fs->modified, sizeof(fs->modified));
+    *fs->view = staged_view;
+    fs->dirty = 0;
     return PVD_OK;
 }

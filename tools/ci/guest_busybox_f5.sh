@@ -92,7 +92,7 @@ cat > "$REPORTS/busybox-f5-guest.md" <<'EOF'
 - **PASS:** Manifest F5 slot boots a trusted userland Unix supervisor, which retains the kernel-owned NON-delegable session rings.\n- **PASS:** The supervisor creates six fresh region capabilities, delegates one RW data / RO ACK channel for each direction using Oinheritv, and sends only Vexecute to the independent Unix init child.\n- **PASS:** Kernel console capabilities are NOT inherited by the child, and no kernel VFS, Pipe or Unix API is introduced.
 - **PASS:** The separate child starts Unix init, constructs a fresh volatile Unix root PVD and enters its embedded F5 evaluator.
 - **PASS:** First prompt displays unix:/$; changing cwd updates the path in the prompt.
-- **PASS:** Real PS/2 input and kernel VGA verify pwd, cd and ls, errors, root confinement, F1 isolation and F5 focus restore.
+- **PASS:** Real PS/2 input and kernel VGA verify pwd, cd and a separately spawned `ls` applet, errors, root confinement, F1 isolation and F5 focus restore.
 - **PASS:** First boot ends in /usr/bin. Second distinct QEMU boot reuses the exact same scratch GE/O disk, executes init again, and enters / (pwd confirms).
 - **LIMITATION:** Supervisor and Unix init are separate native processes, but the F5 evaluator within init is NOT BusyBox ash/sh or a POSIX TTY.
 - **NOT RUN:** Writable GE/O user files, hardware, crash recovery; this manifest enables Vexecute but does not supply a storage manifest selector.

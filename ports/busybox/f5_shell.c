@@ -29,15 +29,15 @@ static int shell_error(const char *line, int status)
     const char *start = line;
     const char *end;
     if (status == PVD_OK) return 0;
-    while (*start == ' ' || *start == '\\t') ++start;
+    while (*start == ' ' || *start == '\t') ++start;
     end = start;
-    while (*end && *end != ' ' && *end != '\\t' &&
+    while (*end && *end != ' ' && *end != '\t' &&
            *end != '|' && *end != '>') ++end;
     if (end == start) start = "command", end = start + 7;
     if (write_bytes(start, (size_t)(end-start)) < 0 ||
         write_text(": ") < 0 ||
         write_text(pvd_error(status)) < 0 ||
-        write_text("\\n") < 0) return -1;
+        write_text("\n") < 0) return -1;
     return 0;
 }
 static int prompt(const Pvd *view)

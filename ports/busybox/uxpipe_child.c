@@ -10,6 +10,7 @@
 extern long obj_list(void *, unsigned long long);
 extern long obj_region_map(int, unsigned long long);
 extern long obj_region_unmap(unsigned long long);
+extern long sleep(long millis);
 
 static int launch_stream(int sending)
 {
@@ -42,6 +43,16 @@ static int launch_stream(int sending)
                         (UxPipeAck *)(unsigned long long)rb,
                         (unsigned long long)wb,(unsigned long long)rb,
                         UXPIPE_WRITER) != 0) goto cleanup;
+        /* REGIONWAIT reports 3 when a previous ACK writer was unmapped.
+         * The producer must not fill the ring before the new consumer has
+         * mapped its ACK writer. The bounded startup rendezvous uses a
+         * release-published ready word and ordinary process sleep.
+         */
+        for (i=0;i<5000u;++i) {
+            if (__atomic_load_n(&pipe.ack->ready,__ATOMIC_ACQUIRE)) break;
+            (void)sleep(1);
+        }
+        if (i == 5000u) goto cleanup;
         while (total < 10000u) {
             unsigned int amount=10000u-total;
             if (amount > sizeof(chunk)) amount=sizeof(chunk);

@@ -7,6 +7,7 @@
 #include "pvd_cli.h"
 #include "../unix/uxshell.h"
 #include "../unix/uxgeo.h"
+#include "../unix/uxexternal.h"
 
 extern int plan2001_busybox_dispatch(int argc, char **argv);
 
@@ -65,6 +66,8 @@ int p2001_f5_shell(Pvd *view, void *context)
     const UxF5Storage *storage = (const UxF5Storage *)context;
     UxGeo geo;
     UxStore store;
+    UxExternal external;
+    int persistent = 0;
     unsigned int used = 0;
     long n;
     if (!view || pvd_getcwd(view, root, sizeof(root)) != PVD_OK ||
@@ -72,12 +75,27 @@ int p2001_f5_shell(Pvd *view, void *context)
         return -1;
     uxfs_init(&fs, view);
     if (storage) {
-        if (!storage->manifest ||
-            uxgeo_bind(&geo, storage->volume, &store) < 0)
+        if (!!storage->executable_volume != !!storage->executable_oid)
+            return -1; /* no incomplete authority context */
+        if (!!storage->volume != !!storage->manifest ||
+            (storage->restore && !storage->manifest))
             return -1;
-        if (storage->restore &&
-            uxfs_restore(&fs, &store, storage->manifest) != PVD_OK)
-            return -1;
+        if (storage->manifest) {
+            if (uxgeo_bind(&geo, storage->volume, &store) < 0)
+                return -1;
+            persistent = 1;
+            if (storage->restore &&
+                uxfs_restore(&fs, &store, storage->manifest) != PVD_OK)
+                return -1;
+        }
+        if (storage->executable_volume) {
+            external.fs = &fs;
+            external.executable_volume = storage->executable_volume;
+            external.executable_oid = storage->executable_oid;
+            io.context = &external;
+            io.external = uxexternal_ls;
+            io.external_ls = 1;
+        }
     }
     if (plan2001_busybox_dispatch(3, echo_args) != 0)
         return -1;
@@ -98,7 +116,7 @@ int p2001_f5_shell(Pvd *view, void *context)
                 write_text("\n") < 0)
                 return -1;
             result = uxshell_eval(&fs, line, &io);
-            if (result == PVD_OK && storage && fs.dirty)
+            if (result == PVD_OK && persistent && fs.dirty)
                 result = uxfs_save(&fs, &store, storage->manifest);
             if (shell_error(line, result) < 0 || prompt(view) < 0)
                 return -1;

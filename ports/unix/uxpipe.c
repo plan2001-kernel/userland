@@ -9,6 +9,16 @@
  * EOF was explicitly published. It is not a successful POSIX EOF.
  */
 #include "uxpipe.h"
+/* UXPIPE startup pacing is always milliseconds. The Newlib target uses
+ * its renamed native sleep stub, NOT POSIX sleep(seconds). Ordinary native
+ * BusyBox and the host regression use their millisecond sleep adapter. */
+#ifdef PLAN2001_UXPIPE_NEWLIB
+extern long p9_native_sleep_millis(long millis);
+#define uxpipe_pause() ((void)p9_native_sleep_millis(1))
+#else
+extern long sleep(long millis);
+#define uxpipe_pause() ((void)sleep(1))
+#endif
 extern long region_wait(unsigned long long base, unsigned long long offset,
                         unsigned long long expected, long long timeout);
 extern long region_wake(unsigned long long base, unsigned long long offset,
@@ -31,6 +41,7 @@ int uxpipe_format(UxPipeData *data, UxPipeAck *ack)
     for (i=0;i<UXPIPE_CAPACITY;++i) data->payload[i]=0;
     publish(&data->produced,0);
     publish(&data->closed,0);
+    publish(&data->ready,0);
     ack->magic = UXPIPE_ACK_MAGIC;
     ack->version = UXPIPE_VERSION;
     publish(&ack->consumed,0);
@@ -69,8 +80,36 @@ int uxpipe_bind(UxPipe *pipe, UxPipeData *data, UxPipeAck *ack,
     if (role == UXPIPE_READER) {
         publish(&ack->ready,1);
         (void)region_wake(ack_base,UXPIPE_READY_OFFSET,1);
+    } else {
+        publish(&data->ready,1);
+        (void)region_wake(data_base,UXPIPE_WRITER_READY_OFFSET,1);
     }
     return 0;
+}
+
+/* Formatting temporarily owns both writer mappings, and releases them
+ * before the child processes SPAWN. The kernel remembers that a writer
+ * existed: REGIONWAIT returns 3 while the new owner has not mapped yet.
+ * Distinguish that legitimate startup gap from loss of an established
+ * writer. Once the peer has advertised readiness, REGIONWAIT=3 remains a
+ * hard error. No sleep/poll is used in the steady-state streaming path.
+ */
+static int await_peer(UxPipe *pipe, long long timeout_ms)
+{
+    const unsigned long long *ready = pipe->role == UXPIPE_WRITER
+        ? &pipe->ack->ready : &pipe->data->ready;
+    unsigned long long remaining = timeout_ms < 0
+        ? UXPIPE_STARTUP_WAIT_MS : (unsigned long long)timeout_ms;
+    if (remaining > UXPIPE_STARTUP_WAIT_MS)
+        remaining = UXPIPE_STARTUP_WAIT_MS;
+    while (!load(ready)) {
+        if (!valid(pipe) || load(&pipe->data->closed) ||
+            load(&pipe->ack->closed) || !remaining)
+            return -1;
+        uxpipe_pause();
+        --remaining;
+    }
+    return valid(pipe) ? 0 : -1;
 }
 long uxpipe_write(UxPipe *pipe, const void *bytes,
                   unsigned int count, long long timeout_ms)
@@ -82,6 +121,7 @@ long uxpipe_write(UxPipe *pipe, const void *bytes,
     if (!pipe || pipe->role != UXPIPE_WRITER || !valid(pipe) ||
         (!src && count) || count > UXPIPE_MAX_IO ||
         timeout_ms < -1) return -1;
+    if (count && await_peer(pipe, timeout_ms) < 0) return -1;
     while (done<count) {
         if (!valid(pipe) || load(&pipe->data->closed) ||
             load(&pipe->ack->closed))
@@ -119,6 +159,7 @@ long uxpipe_read(UxPipe *pipe, void *bytes,
         (!dst && capacity) || capacity > UXPIPE_MAX_IO ||
         timeout_ms < -1) return -1;
     if (!capacity) return 0;
+    if (await_peer(pipe, timeout_ms) < 0) return -1;
     for (;;) {
         if (!valid(pipe) || load(&pipe->ack->closed)) return -1;
         wr=load(&pipe->data->produced);

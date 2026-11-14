@@ -13,6 +13,7 @@
 enum {
     PVD_OK = 0,
     PVD_ENOENT = -2,
+    PVD_EACCES = -13,
     PVD_EIO = -5,
     PVD_EEXIST = -17,
     PVD_EINVAL = -22,

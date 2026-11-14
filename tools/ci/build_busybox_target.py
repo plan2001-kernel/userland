@@ -103,17 +103,22 @@ def main() -> None:
     linker = args.kernel / "micropython/gcc/user.ld"
     originals = [args.busybox / path for path in APPLETS.values()]
     inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c", PORT / "session.c",
-              PORT / "main.c", PORT / "ls_child.c", PORT / "uxpipe_child.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
+              PORT / "main.c", PORT / "ls_child.c", PORT / "cat_child.c", PORT / "uxpipe_child.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
               PORT / "f5_shell.c", PORT / "f5_shell.h",
               UNIX / "supervisor.c", UNIX / "supervisor.h",
               UNIX / "supervisor_main.c",
               UNIX / "pvd.c", UNIX / "pvd.h", UNIX / "init.c",
               UNIX / "init.h", UNIX / "uxfs.c", UNIX / "uxfs.h",
               UNIX / "uxgeo.c", UNIX / "uxgeo.h",
+              UNIX / "uxservice.c", UNIX / "uxservice.h",
               UNIX / "uxshell.c", UNIX / "uxshell.h",
               UNIX / "uxspawn.c", UNIX / "uxspawn.h",
               UNIX / "uxexternal.c", UNIX / "uxexternal.h",
               UNIX / "uxpipe.c", UNIX / "uxpipe.h",
+              UNIX / "uxrpc.c", UNIX / "uxrpc.h",
+              UNIX / "uxrpc_external.c", UNIX / "uxrpc_external.h",
+              UNIX / "uxrpc_child.c", UNIX / "uxrpc_child.h",
+              UNIX / "uxfd.c", UNIX / "uxfd.h",
               runtime / "rt_startup.o",
               runtime / "rt_start.o", runtime / "rt_stubs.o",
               runtime / "rt_misc.o", runtime / "libm_frexp.o",
@@ -144,6 +149,7 @@ def main() -> None:
         "qemu_result": "NOT ASSESSED by build script"}
     try:
         for name, source in {**APPLETS, "ls_child": str(PORT / "ls_child.c"),
+                             "cat_child": str(PORT / "cat_child.c"),
                              "uxpipe_child": str(PORT / "uxpipe_child.c"),
                              "uxpipe": str(UNIX / "uxpipe.c"),
                              "compat": str(PORT / "compat.c"),
@@ -161,8 +167,13 @@ def main() -> None:
                              ("uxfs", UNIX / "uxfs.c"),
                              ("uxgeo", UNIX / "uxgeo.c"),
                              ("uxshell", UNIX / "uxshell.c"),
+                             ("uxservice", UNIX / "uxservice.c"),
                              ("uxspawn", UNIX / "uxspawn.c"),
                              ("uxexternal", UNIX / "uxexternal.c"),
+                             ("uxrpc", UNIX / "uxrpc.c"),
+                             ("uxrpc_external", UNIX / "uxrpc_external.c"),
+                             ("uxrpc_child", UNIX / "uxrpc_child.c"),
+                             ("uxfd", UNIX / "uxfd.c"),
                              ("supervisor", UNIX / "supervisor.c")):
             obj = build / f"{name}.o"
             logged(common + ["-c", str(source), "-o", str(obj)], log)

@@ -7,6 +7,7 @@
 #include "../unix/init.h"
 #include "f5_shell.h"
 #include "../unix/supervisor.h"
+#include "../unix/uxrpc_child.h"
 #include "vobj.h"
 #include "obj.h"
 #endif
@@ -15,6 +16,7 @@ extern int true_main(int argc, char **argv);
 extern int false_main(int argc, char **argv);
 extern int echo_main(int argc, char **argv);
 extern int p2001_ls_main(int argc, char **argv);
+extern int p2001_cat_main(int argc, char **argv);
 extern int p2001_uxpipe_send_main(int argc, char **argv);
 extern int p2001_uxpipe_recv_main(int argc, char **argv);
 extern int strcmp(const char *a, const char *b);
@@ -52,6 +54,8 @@ int plan2001_busybox_dispatch(int argc, char **argv)
         return echo_main(argc, argv);
     if (strcmp(name, "ls") == 0)
         return p2001_ls_main(argc, argv);
+    if (strcmp(name, "cat") == 0)
+        return p2001_cat_main(argc, argv);
     if (strcmp(name, "uxpipe-send") == 0)
         return p2001_uxpipe_send_main(argc, argv);
     if (strcmp(name, "uxpipe-recv") == 0)
@@ -71,9 +75,19 @@ int main(int argc, char **argv)
      * applet request do NOT require F5 console grants: the child gets its
      * own attenuated RO listing and RW stdout regions from its launcher.
      */
+    if (argc >= 1 && argv && argv[0] &&
+        strcmp(argv[0],"uxrpc-client")==0)
+        return p2001_uxrpc_child_main(argc,argv);
     if (argc >= 2 && argv && argv[0] &&
         strcmp(argv[0],"busybox")==0)
-        return plan2001_busybox_dispatch(argc,argv);
+    {
+        int applet_status=plan2001_busybox_dispatch(argc,argv);
+        /* Legacy ls uses two region *frames* in the inverse grant
+         * direction. Do not probe it as UXPIPE, or contaminate its exit. */
+        if(strcmp(argv[1],"echo")==0 || strcmp(argv[1],"cat")==0)
+            p2001_session_finish();
+        return applet_status;
+    }
     static Pvd view;
     UxF5Storage storage = {0};
     UxF5Storage *context = 0;

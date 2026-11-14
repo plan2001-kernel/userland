@@ -190,6 +190,20 @@ int uxfs_read(UxFs *fs, const char *path, void *buf,
     *size = fs->nodes[id].length;
     return PVD_OK;
 }
+int uxfs_info(UxFs *fs, const char *path,
+              unsigned int *kind, unsigned int *size)
+{
+    char resolved[PVD_PATH_MAX];
+    int id, rc;
+    if(!fs || !kind || !size) return PVD_EINVAL;
+    rc=uxfs_path(fs,path,resolved);
+    if(rc) return rc;
+    id=find(fs,resolved);
+    if(id<0) return PVD_ENOENT;
+    *kind=fs->nodes[id].kind;
+    *size=fs->nodes[id].length;
+    return PVD_OK;
+}
 int uxfs_copy(UxFs *fs, const char *src, const char *dest)
 {
     unsigned char tmp[UXFS_DATA_MAX];

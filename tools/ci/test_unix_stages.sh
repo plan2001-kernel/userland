@@ -36,7 +36,7 @@ case "$STAGE" in
       "$ROOT/tests/host/test_uxexternal.c" \
       "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
       "$ROOT/ports/unix/uxexternal.c" "$ROOT/ports/unix/uxspawn.c" \
-      -o "$OUT/uxexternal"
+      "$ROOT/ports/unix/uxpipe.c" -o "$OUT/uxexternal"
     "$OUT/uxexternal"
     "$CC" -std=gnu11 -m64 -O2 -ffreestanding -nostdinc -fno-builtin \
       -Wall -Wextra -Werror -I"$KERNEL/runtime/abi" \
@@ -58,6 +58,18 @@ case "$STAGE" in
       "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
       "$ROOT/ports/unix/uxshell.c" -o "$OUT/uxshell"
     "$OUT/uxshell"
+    "$CC" "${BASE[@]}" "$ROOT/tests/host/test_uxservice.c" \
+      "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
+      "$ROOT/ports/unix/uxshell.c" "$ROOT/ports/unix/uxservice.c" \
+      "$ROOT/ports/unix/uxfd.c" -o "$OUT/uxservice"
+    "$OUT/uxservice"
+    "$CC" "${BASE[@]}" -pthread \
+      "$ROOT/tests/host/test_uxrpc.c" \
+      "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
+      "$ROOT/ports/unix/uxshell.c" "$ROOT/ports/unix/uxservice.c" \
+      "$ROOT/ports/unix/uxfd.c" "$ROOT/ports/unix/uxpipe.c" \
+      "$ROOT/ports/unix/uxrpc.c" -o "$OUT/uxrpc"
+    timeout 30 "$OUT/uxrpc"
     "$CC" "${BASE[@]}" -pthread \
       "$ROOT/tests/host/test_uxpipe.c" "$ROOT/ports/unix/uxpipe.c" \
       -o "$OUT/uxpipe"

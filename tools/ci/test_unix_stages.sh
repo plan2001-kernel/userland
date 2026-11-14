@@ -24,7 +24,15 @@ case "$STAGE" in
     "$CC" -std=gnu11 -m64 -O2 -ffreestanding -nostdinc -fno-builtin \
       -Wall -Wextra -Werror -I"$KERNEL/runtime/abi" \
       -I"$ROOT/ports/unix" -c "$ROOT/ports/unix/uxspawn.c" -o "$OUT/native-spawn.o"
-    echo "PASS: native-target freestanding SPAWN translation unit compiles"
+    "$CC" "${BASE[@]}" -I"$KERNEL/runtime/abi" \
+      "$ROOT/tests/host/test_ls_child.c" "$ROOT/ports/busybox/ls_child.c" \
+      -o "$OUT/native-ls"
+    "$OUT/native-ls"
+    "$CC" -std=gnu11 -m64 -O2 -ffreestanding -nostdinc -fno-builtin \
+      -Wall -Wextra -Werror -I"$KERNEL/runtime/abi" \
+      -I"$ROOT/ports/busybox" \
+      -c "$ROOT/ports/busybox/ls_child.c" -o "$OUT/native-ls.o"
+    echo "PASS: native-target freestanding SPAWN and external ls translation units compile"
     ;;
   7)
     "$CC" "${BASE[@]}" "$ROOT/tests/host/test_uxshell.c" \

@@ -6,6 +6,9 @@
 #ifdef PLAN2001_BUSYBOX_F5
 #include "../unix/init.h"
 #include "f5_shell.h"
+#include "../unix/supervisor.h"
+#include "vobj.h"
+#include "obj.h"
 #endif
 
 extern int true_main(int argc, char **argv);
@@ -61,14 +64,50 @@ int plan2001_busybox_dispatch(int argc, char **argv)
  * This main is the unix-init entry, not a standalone ash/exec launcher.
  * The first shell is a linked same-process callback until SPAWN/FD work.
  */
-int main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
+int main(int argc, char **argv)
 {
     static Pvd view;
-    int status;
+    UxF5Storage storage = {0};
+    UxF5Storage *context = 0;
+    unsigned long long oid=0;
+    VobjListRec grants[16];
+    long n;
+    int exec_count=0, storage_count=0, status;
+    unsigned int i;
 
     if (p2001_session_probe() != 1)
-        exits("unix-init requires the F5 console capability rings");
-    status = p2001_unix_init(&view, p2001_f5_shell, 0);
+        exits("unix-init requires explicitly delegated console streams");
+
+    if (argc >= 1 && argv && argv[0] &&
+        strcmp(argv[0],"unix-child")==0) {
+        if ((argc!=2 && argc!=3) ||
+            uxsupervisor_parse_oid(argv[1],&oid)!=0)
+            exits("unix-child: invalid executable selector");
+        storage.executable_oid=oid;
+        if (argc==3 &&
+            (uxsupervisor_parse_oid(argv[2],&storage.manifest)!=0 ||
+             storage.manifest==oid))
+            exits("unix-child: invalid manifest selector");
+        n=obj_list(grants,16);
+        if (n<0 || n>16) exits("unix-child: missing inherited grants");
+        for(i=0;i<(unsigned int)n;++i) {
+            if(grants[i].kind!=VkindGeVolume) continue;
+            if(grants[i].rights==Vexecute) {
+                ++exec_count;
+                storage.executable_volume=(int)grants[i].handle;
+            }else if(grants[i].rights==
+                     (Vread|Vwrite|Vcreate|Vcommit|Vmeta)) {
+                ++storage_count;
+                storage.volume=(int)grants[i].handle;
+            }else exits("unix-child: excessive GE/O grant");
+        }
+        if(exec_count!=1 || (storage.manifest ? storage_count!=1 :
+                             storage_count!=0))
+            exits("unix-child: incomplete GE/O grant contract");
+        storage.restore=storage.manifest!=0;
+        context=&storage;
+    }
+    status = p2001_unix_init(&view, p2001_f5_shell, context);
     if (status < 0)
         exits("unix-init or shell failed");
     exits("unix-init shell exited");

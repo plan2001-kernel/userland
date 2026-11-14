@@ -103,7 +103,7 @@ int main(void)
                        (unsigned long long)&ack,UXPIPE_WRITER)==0);
     assert(data.ready==1);
     assert(uxpipe_write(&writer,"R",1,0)==1);
-    assert(uxpipe_read(&reader,one,1,0)==1 && one[0]==\'R\');
+    assert(uxpipe_read(&reader,one,1,0)==1 && one[0]=='R');
     assert(uxpipe_format(&data,&ack)==0);
     assert(uxpipe_bind(&writer,&data,&ack,(unsigned long long)&data,
                        (unsigned long long)&ack,UXPIPE_WRITER)==0);
@@ -111,7 +111,7 @@ int main(void)
     assert(uxpipe_bind(&reader,&data,&ack,(unsigned long long)&data,
                        (unsigned long long)&ack,UXPIPE_READER)==0);
     assert(uxpipe_write(&writer,"W",1,0)==1);
-    assert(uxpipe_read(&reader,one,1,0)==1 && one[0]==\'W\');
+    assert(uxpipe_read(&reader,one,1,0)==1 && one[0]=='W');
     /* Exercise the race which previously failed in real F5 QEMU:
      * the consumer blocks before the producer maps its region. */
     assert(uxpipe_format(&data,&ack)==0);
@@ -125,7 +125,7 @@ int main(void)
     assert(uxpipe_write(&writer,"Q",1,-1)==1);
     assert(uxpipe_finish(&writer)==0);
     assert(pthread_join(thread,0)==0);
-    assert(startup_result==1 && startup_byte==\'Q\');
+    assert(startup_result==1 && startup_byte=='Q');
     reset();
     assert(uxpipe_read(&reader,one,1,0)==-1); /* would block */
     assert(uxpipe_write(&writer,payload,UXPIPE_MAX_IO+1u,0)==-1);

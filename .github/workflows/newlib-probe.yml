@@ -1,0 +1,184 @@
+name: Newlib native Plan2001 QEMU experiment
+
+on:
+  push:
+    branches: [experiment/newlib-ci]
+    paths:
+      - '.github/workflows/newlib-probe.yml'
+      - 'ports/newlib/**'
+      - 'tools/ci/newlib_probe.py'
+      - 'tools/ci/guest_newlib.sh'
+      - 'tools/ci/*libgloss*'
+      - 'tests/guest/libgloss*'
+  pull_request:
+    paths:
+      - '.github/workflows/newlib-probe.yml'
+      - 'ports/newlib/**'
+      - 'tools/ci/newlib_probe.py'
+      - 'tools/ci/guest_newlib.sh'
+      - 'tools/ci/*libgloss*'
+      - 'tests/guest/libgloss*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  newlib-native-qemu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Check out Userland
+        uses: actions/checkout@v4
+
+      - name: Install AMD64 build, QEMU and OVMF dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc-14 binutils clang lld file mtools ovmf \
+            qemu-system-x86 python3 curl
+
+      - name: Fetch exact pinned Plan2001 kernel and BusyBox sources
+        run: |
+          python3 tools/ci/fetch_sources.py \
+            --lock config/sources.json \
+            --dest "$RUNNER_TEMP/plan2001-sources" \
+            --reports "$RUNNER_TEMP/plan2001-reports"
+
+      - name: Fetch pinned Newlib 4.6.0 sources from GitHub, verify blobs
+        run: |
+          set -euo pipefail
+          NEWLIB_COMMIT=8ba4275b83ec27529f67e0d477611fa6d8d6e6bd
+          SOURCE_DIR="$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123/newlib/libc/string"
+          mkdir -p "$SOURCE_DIR"
+          for name in strlcpy strlcat strnlen; do
+            case "$name" in
+              strlcpy) expected=3df2e4565692bab5634a4880f58e7342852ff5ef ;;
+              strlcat) expected=f35977932d1d19121e584033c695819697a3ace1 ;;
+              strnlen) expected=3ee18d1c00ed97f57e12d5c298cf6ffd7b30abd6 ;;
+            esac
+            curl -fL --retry 2 --connect-timeout 10 --max-time 40 \
+              "https://raw.githubusercontent.com/cygwin/cygwin/$NEWLIB_COMMIT/newlib/libc/string/$name.c" \
+              -o "$SOURCE_DIR/$name.c"
+            actual=$(git hash-object "$SOURCE_DIR/$name.c")
+            test "$actual" = "$expected" || {
+              echo "Newlib blob mismatch for $name: got $actual expected $expected" >&2
+              exit 1
+            }
+            echo "Verified Newlib $name.c: $actual"
+          done
+
+      - name: Build real Plan2001 AMD64 kernel, UEFI loader
+        env:
+          CC: gcc-14
+        working-directory: ${{ runner.temp }}/plan2001-sources/kernel
+        run: |
+          tools/build-gcc.sh --kernel -j 4
+          tools/build-efi-gcc.sh -j 4
+
+      - name: Build native Plan2001 runtime and volume tools
+        env:
+          CC: gcc-14
+        working-directory: ${{ runner.temp }}/plan2001-sources/kernel
+        run: |
+          tools/build-mpy-gcc.sh -j 4
+          tools/build.sh
+
+      - name: Compile and statically link original Newlib routines as native ELF
+        run: |
+          python3 tools/ci/newlib_probe.py \
+            --kernel "$RUNNER_TEMP/plan2001-sources/kernel" \
+            --newlib "$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123" \
+            --reports "$RUNNER_TEMP/plan2001-reports" --cc gcc-14
+
+      - name: Boot and verify Newlib routines in actual Plan2001 QEMU
+        run: |
+          bash tools/ci/guest_newlib.sh \
+            "$RUNNER_TEMP/plan2001-sources/kernel" \
+            "$RUNNER_TEMP/plan2001-reports/newlib-probe/newlib-plan2001.elf" \
+            "$RUNNER_TEMP/plan2001-reports"
+
+      - name: Build native read/write/sbrk/exit libgloss bridge and exit child
+        run: |
+          python3 tools/ci/build_libgloss.py \
+            --kernel "$RUNNER_TEMP/plan2001-sources/kernel" \
+            --reports "$RUNNER_TEMP/plan2001-reports" --cc gcc-14
+
+      - name: Test native libgloss read/write/sbrk under real Plan2001 QEMU
+        run: |
+          bash tools/ci/guest_libgloss.sh \
+            "$RUNNER_TEMP/plan2001-sources/kernel" \
+            "$RUNNER_TEMP/plan2001-reports/libgloss/libgloss-boot.elf" \
+            "$RUNNER_TEMP/plan2001-reports"
+
+      - name: Seed native MicroPython and libgloss exit child into fresh GE/O
+        run: |
+          python3 tools/ci/seed_busybox_spawn.py \
+            --kernel "$RUNNER_TEMP/plan2001-sources/kernel" \
+            --elf "$RUNNER_TEMP/plan2001-reports/libgloss/libgloss-exit.elf" \
+            --init tests/guest/libgloss_exit_init.py \
+            --reports "$RUNNER_TEMP/plan2001-reports" \
+            --image "$RUNNER_TEMP/plan2001-reports/libgloss-exit.img"
+
+      - name: Verify libgloss exit success/failure through Process Handles
+        run: |
+          bash tools/ci/guest_libgloss_exit.sh \
+            "$RUNNER_TEMP/plan2001-sources/kernel" \
+            "$RUNNER_TEMP/plan2001-reports/libgloss-exit.img" \
+            "$RUNNER_TEMP/plan2001-reports"
+
+      - name: Summarize real results and limitations
+        if: always()
+        run: |
+          {
+            echo '## Newlib trial, AMD64 native Plan2001'
+            if [ -f "$RUNNER_TEMP/plan2001-reports/newlib-probe.md" ]; then
+              cat "$RUNNER_TEMP/plan2001-reports/newlib-probe.md"
+            else
+              echo 'Newlib source/native build: **NOT COMPLETED**.'
+            fi
+            if [ -f "$RUNNER_TEMP/plan2001-reports/newlib-guest.md" ]; then
+              cat "$RUNNER_TEMP/plan2001-reports/newlib-guest.md"
+            else
+              echo 'Real Plan2001 QEMU execution: **NOT COMPLETED**.'
+            fi
+            for name in libgloss-build.md libgloss-guest.md libgloss-exit.md; do
+              if [ -f "$RUNNER_TEMP/plan2001-reports/$name" ]; then
+                cat "$RUNNER_TEMP/plan2001-reports/$name"
+              else
+                echo "$name: **NOT COMPLETED**."
+              fi
+            done
+            echo
+            echo '**Not tested:** full Newlib/newlib-nano, full libc replacement,'
+            echo 'generic POSIX files/TTY, BusyBox linked with Newlib, physical hardware.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload native Newlib ELF and CI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newlib-native-plan2001-qemu
+          path: |
+            ${{ runner.temp }}/plan2001-reports/newlib-probe/*.elf
+            ${{ runner.temp }}/plan2001-reports/newlib-probe/*.txt
+            ${{ runner.temp }}/plan2001-reports/newlib-probe/*.json
+            ${{ runner.temp }}/plan2001-reports/newlib-probe.md
+            ${{ runner.temp }}/plan2001-reports/newlib-probe.log
+            ${{ runner.temp }}/plan2001-reports/newlib-guest.md
+            ${{ runner.temp }}/plan2001-reports/qemu-newlib/*.log
+            ${{ runner.temp }}/plan2001-reports/qemu-newlib/*.json
+            ${{ runner.temp }}/plan2001-reports/libgloss/*.elf
+            ${{ runner.temp }}/plan2001-reports/libgloss/*.txt
+            ${{ runner.temp }}/plan2001-reports/libgloss/*.json
+            ${{ runner.temp }}/plan2001-reports/libgloss-build.log
+            ${{ runner.temp }}/plan2001-reports/libgloss-build.md
+            ${{ runner.temp }}/plan2001-reports/libgloss-guest.md
+            ${{ runner.temp }}/plan2001-reports/libgloss-exit.md
+            ${{ runner.temp }}/plan2001-reports/qemu-libgloss/*.log
+            ${{ runner.temp }}/plan2001-reports/qemu-libgloss/*.json
+            ${{ runner.temp }}/plan2001-reports/qemu-libgloss-exit/*.log
+            ${{ runner.temp }}/plan2001-reports/qemu-libgloss-exit/*.json
+            ${{ runner.temp }}/plan2001-reports/*spawn*.json
+          if-no-files-found: warn
+          retention-days: 14

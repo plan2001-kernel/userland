@@ -36,7 +36,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-14 g++-14 binutils make git \
+            build-essential gcc-14 g++-14 binutils clang lld make git \
             autoconf automake libtool texinfo flex bison \
             python3 curl file mtools ovmf qemu-system-x86
 

@@ -48,6 +48,14 @@ case "$STAGE" in
       "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
       "$ROOT/ports/unix/uxshell.c" -o "$OUT/uxshell"
     "$OUT/uxshell"
+    "$CC" "${BASE[@]}" -pthread \
+      "$ROOT/tests/host/test_uxpipe.c" "$ROOT/ports/unix/uxpipe.c" \
+      -o "$OUT/uxpipe"
+    timeout 20 "$OUT/uxpipe"
+    "$CC" -std=gnu11 -m64 -O2 -ffreestanding -nostdinc -fno-builtin \
+      -Wall -Wextra -Werror -I"$ROOT/ports/unix" \
+      -c "$ROOT/ports/unix/uxpipe.c" -o "$OUT/native-pipe.o"
+    echo "PASS: two-region native pipe protocol compiles for Plan2001"
     ;;
   *) echo "Unknown stage $STAGE" >&2; exit 2;;
 esac

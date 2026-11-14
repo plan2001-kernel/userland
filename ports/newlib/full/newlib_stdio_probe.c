@@ -15,6 +15,8 @@ extern long sleep(long millis);
 extern int _fstat(int fd, struct stat *st);
 extern int _open(const char *path, int flags, ...);
 extern void _exit(int status);
+extern int _read(int fd, char *buf, int count);
+extern void *_sbrk(ptrdiff_t change);
 
 static void check(int predicate, const char *what)
 {
@@ -38,6 +40,10 @@ int main(int argc, char **argv)
     long value;
     struct stat st;
     (void)argc; (void)argv;
+    errno = 0;
+    check(_read(0, tmp, 1) == -1 && errno == EBADF,
+          "stdin must require an explicit capability");
+    check(_sbrk(0) != (void *)-1, "BRK_ used by Newlib allocator");
 
     check(snprintf(tmp, sizeof tmp, "answer:%d:%s", 42, "newlib") == 16,
           "snprintf length");

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Two real Plan2001 AMD64 QEMU boots: native unix-init at manifest F5.
+# Two real Plan2001 AMD64 QEMU boots: trusted Unix supervisor at manifest F5; Unix init is SPAWNed.
 # Run twice with the SAME disposable GE/O disk. Session view is RAM-only.
 set -euo pipefail
 if [ "$#" -ne 3 ]; then
@@ -52,8 +52,8 @@ args=-R
 required=true
 [process.unixInitF5]
 source=geo:PARTUUID=$puuid:OID=0x4f45584543000005
-owner=unixInitF5
-args=unix-init
+owner=unixSupervisorF5
+args=0x4f45584543000006
 required=true
 EOF
 qob_make_esp "$OUT/plan9.ini" "$OUT/esp.img"
@@ -87,14 +87,14 @@ for phase in initial reboot; do
 done
 
 cat > "$REPORTS/busybox-f5-guest.md" <<'EOF'
-## Native unix-init -> same-process F5 shell in real QEMU
+## Native trusted supervisor -> separate Unix init -> F5 shell in real QEMU
 
-- **PASS:** Manifest slot 4 (Ctrl+Alt+F5) boots a native unix-init ELF with attenuated session stdin/stdout/stderr grants.
-- **PASS:** Init constructs a fresh volatile Unix root PVD, and hands it to the linked F5 builtin shell.
+- **PASS:** Manifest F5 slot boots a trusted userland Unix supervisor, which retains the kernel-owned NON-delegable session rings.\n- **PASS:** The supervisor creates six fresh region capabilities, delegates one RW data / RO ACK channel for each direction using Oinheritv, and sends only Vexecute to the independent Unix init child.\n- **PASS:** Kernel console capabilities are NOT inherited by the child, and no kernel VFS, Pipe or Unix API is introduced.
+- **PASS:** The separate child starts Unix init, constructs a fresh volatile Unix root PVD and enters its embedded F5 evaluator.
 - **PASS:** First prompt displays unix:/$; changing cwd updates the path in the prompt.
 - **PASS:** Real PS/2 input and kernel VGA verify pwd, cd and ls, errors, root confinement, F1 isolation and F5 focus restore.
 - **PASS:** First boot ends in /usr/bin. Second distinct QEMU boot reuses the exact same scratch GE/O disk, executes init again, and enters / (pwd confirms).
-- **LIMITATION:** Shell is still an in-process builtin command reader, NOT BusyBox ash/sh, a separate process, or a POSIX TTY.
-- **NOT RUN:** Persistent Unix paths, external SPAWN applets, physical hardware, crash recovery.
+- **LIMITATION:** Supervisor and Unix init are separate native processes, but the F5 evaluator within init is NOT BusyBox ash/sh or a POSIX TTY.
+- **NOT RUN:** Writable GE/O user files, hardware, crash recovery; this manifest enables Vexecute but does not supply a storage manifest selector.
 EOF
 echo "Native unix-init / F5 shell real VGA + cold-boot reset QEMU test PASS"

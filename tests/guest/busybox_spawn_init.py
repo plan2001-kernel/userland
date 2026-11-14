@@ -74,7 +74,7 @@ def external_ls():
     child = None
     try:
         writer = plan9.region_map(source)
-        frame = len(expected).to_bytes(8, "little") + expected
+        frame = bytes([(len(expected) >> (8 * i)) & 255 for i in range(8)]) + expected
         plan9.region_write(writer, frame)
         # The child gets only read access to this region, no writer right.
         observer = plan9.region_map(stdout, 0, 1)
@@ -86,7 +86,9 @@ def external_ls():
         if state[2] != plan9.OBJ_PROC_CAUSE_EXIT or state[1] != "":
             raise RuntimeError("external ls process exit failure")
         result = plan9.region_read(observer, 4096)
-        n = int.from_bytes(result[0:8], "little")
+        n = 0
+        for i in range(8):
+            n |= result[i] << (8 * i)
         if n > 4088 or result[8:8+n] != expected:
             raise RuntimeError("external ls delegated stdout mismatch")
         print("PLAN2001-EXTERNAL-LS-OUTPUT-START")

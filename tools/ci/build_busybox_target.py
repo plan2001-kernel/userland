@@ -65,7 +65,7 @@ def check_elf(elf: Path, reports: Path, title: str) -> dict:
         for sym in ("full_read", "p2001_session_read", "p2001_session_write",
                     "region_wait", "region_wake",
                     "pvd_bootstrap", "pvd_chdir", "pvd_getcwd",
-                    "uxfs_list", "uxshell_eval",
+                    "uxfs_list", "uxshell_eval", "uxexternal_ls",
                     "p2001_unix_init", "p2001_f5_shell"):
             if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
                 raise RuntimeError(f"{title}: missing console symbol {sym}")
@@ -105,6 +105,7 @@ def main() -> None:
               UNIX / "uxgeo.c", UNIX / "uxgeo.h",
               UNIX / "uxshell.c", UNIX / "uxshell.h",
               UNIX / "uxspawn.c", UNIX / "uxspawn.h",
+              UNIX / "uxexternal.c", UNIX / "uxexternal.h",
               runtime / "rt_startup.o",
               runtime / "rt_start.o", runtime / "rt_stubs.o",
               runtime / "rt_misc.o", runtime / "libm_frexp.o",
@@ -150,7 +151,8 @@ def main() -> None:
                              ("uxfs", UNIX / "uxfs.c"),
                              ("uxgeo", UNIX / "uxgeo.c"),
                              ("uxshell", UNIX / "uxshell.c"),
-                             ("uxspawn", UNIX / "uxspawn.c")):
+                             ("uxspawn", UNIX / "uxspawn.c"),
+                             ("uxexternal", UNIX / "uxexternal.c")):
             obj = build / f"{name}.o"
             logged(common + ["-c", str(source), "-o", str(obj)], log)
             pvd_objects.append(obj)

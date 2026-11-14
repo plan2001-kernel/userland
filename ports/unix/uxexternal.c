@@ -50,13 +50,6 @@ static int emit_listing(void *ctx, const void *name, unsigned int n)
     list->data[list->used++] = '\n';
     return 0;
 }
-static void copy(void *dst, const void *src, unsigned int n)
-{
-    unsigned char *d = (unsigned char *)dst;
-    const unsigned char *s = (const unsigned char *)src;
-    unsigned int i;
-    for (i=0;i<n;++i) d[i] = s[i];
-}
 int uxexternal_ls(void *ctx, const char *command, char *const *argv,
                   unsigned int argc, void *output, unsigned int capacity,
                   unsigned int *size)

@@ -66,6 +66,14 @@ int plan2001_busybox_dispatch(int argc, char **argv)
  */
 int main(int argc, char **argv)
 {
+    /* The same audited static ELF is both the supervised Unix-init child
+     * and a restricted BusyBox multicall executable. For an explicit
+     * applet request do NOT require F5 console grants: the child gets its
+     * own attenuated RO listing and RW stdout regions from its launcher.
+     */
+    if (argc >= 2 && argv && argv[0] &&
+        strcmp(argv[0],"busybox")==0)
+        return plan2001_busybox_dispatch(argc,argv);
     static Pvd view;
     UxF5Storage storage = {0};
     UxF5Storage *context = 0;

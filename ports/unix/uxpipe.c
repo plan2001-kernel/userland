@@ -9,9 +9,16 @@
  * EOF was explicitly published. It is not a successful POSIX EOF.
  */
 #include "uxpipe.h"
-/* Native Plan2001 sleep is in milliseconds. Only used for bounded
- * startup rendezvous, never to poll an established data stream. */
+/* UXPIPE startup pacing is always milliseconds. The Newlib target uses
+ * its renamed native sleep stub, NOT POSIX sleep(seconds). Ordinary native
+ * BusyBox and the host regression use their millisecond sleep adapter. */
+#ifdef PLAN2001_UXPIPE_NEWLIB
+extern long p9_native_sleep_millis(long millis);
+#define uxpipe_pause() ((void)p9_native_sleep_millis(1))
+#else
 extern long sleep(long millis);
+#define uxpipe_pause() ((void)sleep(1))
+#endif
 extern long region_wait(unsigned long long base, unsigned long long offset,
                         unsigned long long expected, long long timeout);
 extern long region_wake(unsigned long long base, unsigned long long offset,
@@ -99,7 +106,7 @@ static int await_peer(UxPipe *pipe, long long timeout_ms)
         if (!valid(pipe) || load(&pipe->data->closed) ||
             load(&pipe->ack->closed) || !remaining)
             return -1;
-        (void)sleep(1);
+        uxpipe_pause();
         --remaining;
     }
     return valid(pipe) ? 0 : -1;

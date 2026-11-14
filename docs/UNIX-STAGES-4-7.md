@@ -32,10 +32,13 @@ persistence across reboot: NOT RUN.** Real hardware: NOT RUN.
 
 ## Stage 5: upstream BusyBox ash (blocked)
 
-The pinned BusyBox 1.36.1 is compiled by the existing native build only
-for upstream `true.c`, `false.c`, and `echo.c`. The stage 5 CI job
+The pinned BusyBox 1.36.1 is compiled by the existing native build for
+upstream `true.c`, `false.c`, and `echo.c` plus a Plan2001-specific native
+`ls` applet. `ports/unix/fnmatch.[ch]` and host/native tests provide the
+first freestanding libc filename-pattern matching dependency (no locales or
+named POSIX character classes). The stage 5 CI job
 separately tries compiling the original `shell/ash.c` with
-`-ffreestanding -nostdinc` and the current userland libbb header, and
+`-ffreestanding -nostdinc` and the current userland headers, and
 publishes a compiler diagnostic. An unsuccessful compile is **FAIL** for
 that job, not a reason to suppress stage 6/7 jobs. Full BusyBox ash,
 `libbb`, POSIX libc, job control, `fork/exec`, and QEMU ash tests are
@@ -52,13 +55,16 @@ integer UNIX FDs inherited by the kernel. The three grant slots are limited
 to attenuated read/write/meta rights and reject guessed/nonexistent handles
 at the kernel call boundary.
 
-The host ABI test uses a deliberately mocked SPAWN and ProcessWait; the
-native freestanding translation unit is also compiled. Neither constitutes
-proof that `ls` is yet an actual separate native QEMU process. External
+The host ABI test uses a deliberately mocked SPAWN and ProcessWait, and
+compiles the native external ls applet. Separately, the real Plan2001 QEMU
+BusyBox-SPAWN fixture starts `busybox ls /` as an independent native
+process, delegates a RO directory-name region and RW stdout region, waits
+on its Process Handle and verifies the bytes. That IS a real external ls
+process. It is NOT yet an external `ls` started by the F5 shell. External
 execution is enabled only by explicitly installing the
 `UxShellIO.external` callback. The normal F5 evaluator keeps `ls`
 in-process until a real volume-root launch and stream receiver is wired.
-**Independent `ls` in QEMU: NOT RUN.**
+**Independent `ls` in QEMU: PASS in MicroPython SPAWN fixture; F5 hookup: NOT RUN.**
 
 ## Stage 7: redirection and stream experiments
 

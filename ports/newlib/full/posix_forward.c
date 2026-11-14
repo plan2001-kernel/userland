@@ -68,3 +68,24 @@ int kill(pid_t pid, int sig)
 {
     return _kill((int)pid, sig);
 }
+
+/* Plan2001 SLEEP(17) takes milliseconds, while POSIX sleep() takes seconds.
+ * The generated native sleep stub is renamed to p9_native_sleep_millis
+ * during link; do not export it with the POSIX name and wrong units.
+ */
+extern long p9_native_sleep_millis(long);
+
+unsigned int sleep(unsigned int seconds)
+{
+    unsigned int remaining = seconds;
+    while(remaining != 0) {
+        /* Bound the milliseconds argument and avoid overflow. */
+        unsigned int chunk = remaining > 2147483u ? 2147483u : remaining;
+        if(p9_native_sleep_millis((long)chunk * 1000L) < 0) {
+            errno = EINTR;
+            return remaining;
+        }
+        remaining -= chunk;
+    }
+    return 0;
+}

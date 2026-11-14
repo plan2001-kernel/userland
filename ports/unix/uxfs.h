@@ -21,6 +21,7 @@ typedef struct {
 } UxNode;
 typedef struct {
     Pvd *view;
+    int dirty;                 /* unsaved file metadata/content mutations */
     UxNode nodes[UXFS_NODES];
     unsigned char data[UXFS_NODES][UXFS_DATA_MAX];
 } UxFs;

@@ -3,6 +3,8 @@
  * stdin _read and native console _write. Failure means no PASS marker.
  */
 #include <errno.h>
+#include <stddef.h>
+#include <unistd.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,11 +46,13 @@ int main(int argc, char **argv)
     check(_read(0, tmp, 1) == -1 && errno == EBADF,
           "stdin must require an explicit capability");
     check(_sbrk(0) != (void *)-1, "BRK_ used by Newlib allocator");
+    check(sbrk(0) == _sbrk(0), "sbrk POSIX forward shares break");
 
     check(snprintf(tmp, sizeof tmp, "answer:%d:%s", 42, "newlib") == 16,
           "snprintf length");
     check(strcmp(tmp, "answer:42:newlib") == 0, "snprintf content");
     printf("PLAN2001-NEWLIB-FULL-PRINTF-PASS %s\n", tmp);
+    check(write(1, "", 0) == 0, "public write forwards to native adapter");
     fflush(stdout);
 
     p = (char *)malloc(8192);
@@ -92,6 +96,7 @@ int main(int argc, char **argv)
     __atomic_store_n(&slot->seq, 2, __ATOMIC_RELEASE);
     __atomic_store_n(&hdr->write_seq, 1, __ATOMIC_RELEASE);
     check(p9_full_bind_stdin((int)region) == 0, "bind stdin capability");
+    check(read(0, tmp, 0) == 0, "public read forwards to native adapter");
     check(fgets(tmp, sizeof tmp, stdin) != NULL, "Newlib fgets from region");
     check(strcmp(tmp, source) == 0, "Newlib stdin content");
     p9_full_unbind_stdin();

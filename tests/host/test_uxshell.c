@@ -29,10 +29,27 @@ static int external(void *ctx, const char *name, char *const *argv,
     ++external_calls;
     return 0;
 }
+static unsigned int native_calls;
+static int pipeline(void *ctx,char *const *left,unsigned int lc,
+                    char *const *right,unsigned int rc,
+                    void *dst,unsigned int cap,unsigned int *n)
+{
+    static const char result[]="native-pipe-output\n";
+    (void)ctx;
+    assert(lc==2 && rc==1);
+    assert(!strcmp(left[0],"echo") && !strcmp(left[1],"hello"));
+    assert(!strcmp(right[0],"cat"));
+    assert(cap>=sizeof(result)-1);
+    memcpy(dst,result,sizeof(result)-1);
+    *n=sizeof(result)-1;
+    ++native_calls;
+    return 0;
+}
 static void reset(void) {pos=0; received[0]=0;}
 int main(void)
 {
-    UxShellIO io={0,emit,0,0};
+    UxShellIO io={0};
+    io.emit=emit;
     assert(pvd_bootstrap(&pvd)==0);
     uxfs_init(&fs,&pvd);
     assert(uxshell_eval(&fs, "echo test > /tmp/file", &io)==0);
@@ -73,6 +90,10 @@ int main(void)
     assert(uxshell_eval(&fs,"ls",&io)==0);
     assert(!strcmp(received,"external-ls\n"));
     assert(external_calls==1);
+    reset();
+    io.pipeline=pipeline;
+    assert(uxshell_eval(&fs,"echo hello | cat",&io)==0);
+    assert(!strcmp(received,"native-pipe-output\n") && native_calls==1);
     puts("PASS: commands, quotes, >, >>, |, errors, separate-executor request");
     return 0;
 }

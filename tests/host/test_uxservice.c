@@ -17,7 +17,8 @@ static int emit(void *ctx,const void *buf,unsigned int n)
 }
 int main(void)
 {
-    UxShellIO io={0,emit,0,0};
+    UxShellIO io={0};
+    io.emit=emit;
     char buf[32]={0};
     int fa,fb;
     assert(pvd_bootstrap(&view)==0);

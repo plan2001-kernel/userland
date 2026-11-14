@@ -184,6 +184,16 @@ try:
             "F5 ls did not execute as a second native SPAWN process: "
             + str(spawns)
         )
+        # Must launch two extra real kernel processes; the older
+        # "cat file | cat" path keeps the sequential legacy fallback.
+        enter("echo piped | cat")
+        waitscreen("native-spawn-concurrent-pipe", "\npiped\nunix:/$")
+        pipe_spawns = re.findall(
+            r"o: SPAWN pid=\d+ handle=\d+ oid=0x4f45584543000006\b",
+            serial.read_text(errors="replace"))
+        assert len(pipe_spawns) >= 4, (
+            "echo|cat did not SPAWN both producer and consumer: "
+            + str(pipe_spawns))
         enter("cd /usr/bin")
         enter("pwd")
         waitscreen("pvd-pwd-bin", "\n/usr/bin\nunix:/usr/bin$")

@@ -2,7 +2,7 @@
 # Two real Plan2001 AMD64 QEMU boots: trusted Unix supervisor at manifest F5; Unix init is SPAWNed.
 # Run twice with the SAME disposable GE/O disk. Session view is RAM-only.
 set -euo pipefail
-if [ "$#" -ne 3 ]; then
+if [ "$#" -ne 3 ] && [ "$#" -ne 4 ]; then
   echo "usage: guest_busybox_f5.sh KERNEL_SOURCE SEEDED_GE_O_IMAGE REPORT_DIR" >&2
   exit 2
 fi
@@ -10,6 +10,11 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 KERNEL=$(cd "$1" && pwd)
 IMAGE=$(realpath "$2")
 REPORTS=$(cd "$3" && pwd)
+MODE=${4:-default}
+if [ "$MODE" != default ] && [ "$MODE" != newlib-supervised ]; then
+  echo "unsupported acceptance mode: $MODE" >&2
+  exit 2
+fi
 OUT="$REPORTS/qemu-busybox-f5"
 mkdir -p "$OUT"
 [ -f "$IMAGE" ] || { echo "Missing seeded GE/O image" >&2; exit 1; }
@@ -62,7 +67,9 @@ qob_make_disk "$IMAGE" "$OUT/disk.img" "$OUT/esp.img" "$puuid" "$OUT/disk.layout
 
 # The original disk image is built once. Between boots only the QEMU
 # process and its OVMF variable overlay are reset, not the GE/O disk.
-for phase in initial reboot; do
+phases=(initial reboot)
+if [ "$MODE" = newlib-supervised ]; then phases=(initial); fi
+for phase in "${phases[@]}"; do
   mon="$OUT/monitor-$phase.sock"
   serial="$OUT/serial-$phase.log"
   vars="$OUT/vars-$phase.fd"
@@ -82,10 +89,23 @@ for phase in initial reboot; do
 
   timeout 240 python3 "$ROOT/tools/ci/f5_console_accept.py" \
     "$mon" "$serial" "$OUT/screens/$phase" \
-    "$KERNEL/kernel/core/fbconsolefont.h" "${UX_GEO_PERSIST:+persist-}$phase"
+    "$KERNEL/kernel/core/fbconsolefont.h" "$([ "$MODE" = default ] && printf "%s" "${UX_GEO_PERSIST:+persist-}$phase" || printf "%s" "$MODE")"
   qob_cleanup
 done
 
+if [ "$MODE" = newlib-supervised ]; then
+  cat > "$REPORTS/newlib-supervised-guest.md" <<'EOF'
+## Native Newlib process over supervisor-delegated UXPIPE (real QEMU)
+
+- **PASS:** trusted F5 supervisor boots a Newlib-only child with six attenuated Oinheritv region Handles and one execute-only GE/O volume.
+- **PASS:** public read(0) receives keyboard input forwarded by the supervisor; write(1) and write(2) publish to separate supervisor-read streams.
+- **PASS:** fstat(0,1,2) identifies streams as FIFO; close(0,1,2) publishes explicit stream close/EOF.
+- **PASS:** F1 console isolation and F5 VGA output on actual Plan2001 QEMU.
+- **NOT RUN:** arbitrary POSIX tty, filesystem RPC, physical hardware.
+EOF
+  echo "Native Newlib supervised stdio/UXPIPE real QEMU test PASS"
+  exit 0
+fi
 cat > "$REPORTS/busybox-f5-guest.md" <<'EOF'
 ## Native trusted supervisor -> separate Unix init -> F5 shell in real QEMU
 

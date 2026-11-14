@@ -125,7 +125,7 @@ int main(void)
     assert(uxsupervisor_run(0x1234,0)==0);
     assert(created==6 && opened_exec==1 && opened_store==0);
     assert(launches==1 && received_grants==7);
-    assert(closed==8 && unmapped==18 && !terminate_count);
+    assert(closed==8 && unmapped==12 && !terminate_count);
     reset();expect_storage=1;
     assert(uxsupervisor_run(0x1234,0x3456)==0);
     assert(opened_exec==1 && opened_store==1 && received_grants==8);

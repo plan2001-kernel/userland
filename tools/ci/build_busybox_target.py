@@ -101,7 +101,11 @@ def main() -> None:
               PORT / "main.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
               PORT / "f5_shell.c", PORT / "f5_shell.h",
               UNIX / "pvd.c", UNIX / "pvd.h", UNIX / "init.c",
-              UNIX / "init.h", runtime / "rt_startup.o",
+              UNIX / "init.h", UNIX / "uxfs.c", UNIX / "uxfs.h",
+              UNIX / "uxgeo.c", UNIX / "uxgeo.h",
+              UNIX / "uxshell.c", UNIX / "uxshell.h",
+              UNIX / "uxspawn.c", UNIX / "uxspawn.h",
+              runtime / "rt_startup.o",
               runtime / "rt_start.o", runtime / "rt_stubs.o",
               runtime / "rt_misc.o", runtime / "libm_frexp.o",
               runtime / "libm_ldexp.o", runtime / "libm_scalbn.o", *originals]
@@ -141,7 +145,11 @@ def main() -> None:
         for name, source in (("pvd", UNIX / "pvd.c"),
                              ("pvd_cli", PORT / "pvd_cli.c"),
                              ("unix_init", UNIX / "init.c"),
-                             ("f5_shell", PORT / "f5_shell.c")):
+                             ("f5_shell", PORT / "f5_shell.c"),
+                             ("uxfs", UNIX / "uxfs.c"),
+                             ("uxgeo", UNIX / "uxgeo.c"),
+                             ("uxshell", UNIX / "uxshell.c"),
+                             ("uxspawn", UNIX / "uxspawn.c")):
             obj = build / f"{name}.o"
             logged(common + ["-c", str(source), "-o", str(obj)], log)
             pvd_objects.append(obj)

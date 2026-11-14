@@ -17,6 +17,13 @@ static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t changed=PTHREAD_COND_INITIALIZER;
 static unsigned int waits, wakes;
 static int injected_gone;
+/* The native runtime's sleep argument is milliseconds, not POSIX seconds. */
+long sleep(long millis)
+{
+    struct timespec ts={millis/1000,(millis%1000)*1000000L};
+    while(nanosleep(&ts,&ts)<0 && errno==EINTR) {}
+    return 0;
+}
 long region_wait(unsigned long long base, unsigned long long offset,
                  unsigned long long expected, long long timeout)
 {
@@ -64,6 +71,14 @@ static void reset(void)
                        (unsigned long long)&ack,UXPIPE_READER)==0);
 }
 static unsigned char payload[10000];
+static unsigned char startup_byte;
+static long startup_result;
+static void *early_reader(void *unused)
+{
+    (void)unused;
+    startup_result=uxpipe_read(&reader,&startup_byte,1,-1);
+    return 0;
+}
 static void *producer(void *unused)
 {
     (void)unused;
@@ -77,6 +92,40 @@ int main(void)
     unsigned int i, total=0;
     long n;
     pthread_t thread;
+    /* Both directions must reject an unready peer in nonblocking mode,
+     * then work when the other process has installed its writer mapping. */
+    assert(uxpipe_format(&data,&ack)==0);
+    assert(uxpipe_bind(&reader,&data,&ack,(unsigned long long)&data,
+                       (unsigned long long)&ack,UXPIPE_READER)==0);
+    assert(ack.ready==1 && data.ready==0);
+    assert(uxpipe_read(&reader,one,1,0)==-1);
+    assert(uxpipe_bind(&writer,&data,&ack,(unsigned long long)&data,
+                       (unsigned long long)&ack,UXPIPE_WRITER)==0);
+    assert(data.ready==1);
+    assert(uxpipe_write(&writer,"R",1,0)==1);
+    assert(uxpipe_read(&reader,one,1,0)==1 && one[0]==\'R\');
+    assert(uxpipe_format(&data,&ack)==0);
+    assert(uxpipe_bind(&writer,&data,&ack,(unsigned long long)&data,
+                       (unsigned long long)&ack,UXPIPE_WRITER)==0);
+    assert(uxpipe_write(&writer,"W",1,0)==-1);
+    assert(uxpipe_bind(&reader,&data,&ack,(unsigned long long)&data,
+                       (unsigned long long)&ack,UXPIPE_READER)==0);
+    assert(uxpipe_write(&writer,"W",1,0)==1);
+    assert(uxpipe_read(&reader,one,1,0)==1 && one[0]==\'W\');
+    /* Exercise the race which previously failed in real F5 QEMU:
+     * the consumer blocks before the producer maps its region. */
+    assert(uxpipe_format(&data,&ack)==0);
+    assert(uxpipe_bind(&reader,&data,&ack,(unsigned long long)&data,
+                       (unsigned long long)&ack,UXPIPE_READER)==0);
+    startup_result=-99;
+    assert(pthread_create(&thread,0,early_reader,0)==0);
+    (void)sleep(5);
+    assert(uxpipe_bind(&writer,&data,&ack,(unsigned long long)&data,
+                       (unsigned long long)&ack,UXPIPE_WRITER)==0);
+    assert(uxpipe_write(&writer,"Q",1,-1)==1);
+    assert(uxpipe_finish(&writer)==0);
+    assert(pthread_join(thread,0)==0);
+    assert(startup_result==1 && startup_byte==\'Q\');
     reset();
     assert(uxpipe_read(&reader,one,1,0)==-1); /* would block */
     assert(uxpipe_write(&writer,payload,UXPIPE_MAX_IO+1u,0)==-1);

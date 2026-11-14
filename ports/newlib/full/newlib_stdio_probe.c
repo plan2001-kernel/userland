@@ -14,11 +14,14 @@
 #include "obj.h"
 #include "plan2001_full.h"
 #include "../../unix/uxpipe.h"
+#include <fcntl.h>
 
 extern int _fstat(int fd, struct stat *st);
 extern int _open(const char *path, int flags, ...);
 extern void _exit(int status);
 extern int _read(int fd, char *buf, int count);
+extern int _unlink(const char *path);
+extern int _stat(const char *path, struct stat *st);
 extern off_t _lseek(int fd, off_t offset, int whence);
 extern void *_sbrk(ptrdiff_t change);
 
@@ -34,6 +37,38 @@ static void check(int predicate, const char *what)
 
 /* Test the *actual* native Plan2001 region maps and the supervisor's
  * UXPIPE format, not a Linux pipe or synthetic success. */
+
+static void check_uxfiles(void)
+{
+    static Pvd view;
+    static UxService service;
+    const char *filename="/tmp/newlib-file";
+    char buffer[64]={0};
+    struct stat st;
+    int fd;
+    check(pvd_bootstrap(&view)==PVD_OK,"bootstrap PVD file view");
+    uxservice_init(&service,&view);
+    check(p9_full_bind_files(&service)==0,"bind explicit Unix file service");
+    fd=_open(filename,O_CREAT|O_RDWR|O_TRUNC,0600);
+    check(fd>=3,"Newlib _open via delegated Unix file view");
+    check(write(fd,"newlib-file-test",16)==16,"Newlib write file");
+    check(lseek(fd,0,SEEK_SET)==0,"Newlib lseek file");
+    check(read(fd,buffer,sizeof(buffer))==16,"Newlib read file");
+    check(memcmp(buffer,"newlib-file-test",16)==0,"Newlib file contents");
+    check(_fstat(fd,&st)==0 && S_ISREG(st.st_mode) && st.st_size==16,
+          "Newlib fstat regular file");
+    check(close(fd)==0,"Newlib close regular file");
+    check(_stat(filename,&st)==0 && st.st_size==16,
+          "Newlib stat via UXFS");
+    check(_unlink(filename)==0,"Newlib unlink via UXFS");
+    errno=0;
+    check(_open(filename,O_RDONLY)==-1 && errno==ENOENT,
+          "Newlib file path no longer exists");
+    p9_full_unbind_files();
+    printf("PLAN2001-NEWLIB-FULL-UXFILE-PASS\n");
+    fflush(stdout);
+}
+
 static void check_uxpipe(void)
 {
     int handles[6];
@@ -181,6 +216,7 @@ int main(int argc, char **argv)
     fflush(stdout);
 
     check_uxpipe();
+    check_uxfiles();
     printf("PLAN2001-NEWLIB-FULL-PASS\n");
     fflush(stdout);
     for(;;)

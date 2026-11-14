@@ -9,6 +9,7 @@
  * Other descriptors/paths deliberately return EBADF or ENOSYS.
  */
 #include <errno.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -19,6 +20,7 @@
 #include "obj.h"
 #include "sysctl.h"
 #include "../../unix/uxpipe.h"
+#include "../../unix/uxfd.h"
 
 extern long objcreate(unsigned long long, unsigned long long, void *,
                       unsigned long long, void *);
@@ -46,6 +48,9 @@ static uintptr_t read_base;
 static uint64_t read_cursor;
 static unsigned read_pos, read_len;
 static unsigned char read_cache[OBJ_RING_DATA];
+/* File descriptors 3+ use one explicitly attached trusted Unix service. */
+static UxFdTable file_table;
+static int files_bound;
 static int console_handles[2] = {-1, -1};
 static unsigned char console_closed[2];
 
@@ -88,6 +93,40 @@ long p9_full_region_close(int handle)
     return objclose(handle);
 }
 
+
+
+int p9_full_bind_files(UxService *service)
+{
+    if(!service || !service->fs.view || files_bound) {
+        errno = EINVAL; return -1;
+    }
+    uxfd_init(&file_table,service);
+    files_bound=1;
+    return 0;
+}
+void p9_full_unbind_files(void)
+{
+    uxfd_init(&file_table,0);
+    files_bound=0;
+}
+static int translate_fs(int code)
+{
+    switch(code) {
+    case PVD_ENOENT: return ENOENT;
+    case PVD_EIO: return EIO;
+    case PVD_EEXIST: return EEXIST;
+    case PVD_ENAMETOOLONG: return ENAMETOOLONG;
+    case PVD_ENOSPC: return ENOSPC;
+    case PVD_ELOOP: return ELOOP;
+    case PVD_EAMBIG: return EINVAL;
+    default: return EINVAL;
+    }
+}
+static int fail_fs(int code)
+{
+    errno = translate_fs(code);
+    return -1;
+}
 
 long region_wait(unsigned long long base, unsigned long long off,
                  unsigned long long expected, long long timeout_ms)
@@ -180,6 +219,12 @@ int _read(int fd, char *buf, int count)
 {
     ObjRingHeader *h;
     unsigned n;
+    if(fd >= 3 && files_bound) {
+        long result;
+        if(count < 0 || (count && !buf)) { errno = EINVAL; return -1; }
+        result = uxfd_read(&file_table,fd,buf,(unsigned)count);
+        return result < 0 ? fail_fs((int)result) : (int)result;
+    }
     if(fd != 0 || (read_base == 0 && !proxy_bound) || proxy_closed[0]) { errno = EBADF; return -1; }
     if(count < 0) { errno = EINVAL; return -1; }
     if(count == 0) return 0;
@@ -238,6 +283,12 @@ int _write(int fd, const char *buf, int count)
     unsigned sent = 0;
     long h, ret;
     int index;
+    if(fd >= 3 && files_bound) {
+        long result;
+        if(count < 0 || (count && !buf)) { errno = EINVAL; return -1; }
+        result = uxfd_write(&file_table,fd,buf,(unsigned)count);
+        return result < 0 ? fail_fs((int)result) : (int)result;
+    }
     if(fd != 1 && fd != 2) { errno = EBADF; return -1; }
     if(count < 0) { errno = EINVAL; return -1; }
     if(count == 0) return 0;
@@ -319,6 +370,10 @@ _Noreturn void _exit(int code)
 
 int _close(int fd)
 {
+    if(fd >= 3 && files_bound) {
+        int code = uxfd_close(&file_table,fd);
+        return code == PVD_OK ? 0 : fail_fs(code);
+    }
     if(proxy_bound && fd >= 0 && fd <= 2) {
         if(proxy_closed[fd]) { errno = EBADF; return -1; }
         proxy_closed[fd] = 1;
@@ -342,6 +397,17 @@ int _close(int fd)
 int _fstat(int fd, struct stat *st)
 {
     if(st == 0) { errno = EFAULT; return -1; }
+    if(fd >= 3 && files_bound) {
+        unsigned kind, length;
+        int code=uxfd_info(&file_table,fd,&kind,&length);
+        if(code) return fail_fs(code);
+        memset(st,0,sizeof *st);
+        st->st_mode=(kind==UXFS_DIR ? S_IFDIR : S_IFREG) | 0600;
+        st->st_size=length;
+        st->st_nlink=1;
+        st->st_blksize=UXFS_DATA_MAX;
+        return 0;
+    }
     if(proxy_bound && fd >= 0 && fd <= 2 && !proxy_closed[fd]) {
         memset(st, 0, sizeof *st);
         st->st_mode = S_IFIFO | 0600;
@@ -363,6 +429,11 @@ int _fstat(int fd, struct stat *st)
 
 int _isatty(int fd)
 {
+    if(fd>=3 && files_bound) {
+        unsigned kind, length;
+        errno = uxfd_info(&file_table,fd,&kind,&length) == PVD_OK ? ENOTTY : EBADF;
+        return 0;
+    }
     if(proxy_bound && fd >= 0 && fd <= 2) {
         errno = proxy_closed[fd] ? EBADF : ENOTTY;
         return 0;
@@ -378,6 +449,11 @@ int _isatty(int fd)
 
 off_t _lseek(int fd, off_t offset, int whence)
 {
+    if(fd >= 3 && files_bound) {
+        long long pos = uxfd_seek(&file_table,fd,(long long)offset,whence);
+        if(pos < 0) { (void)fail_fs((int)pos); return (off_t)-1; }
+        return (off_t)pos;
+    }
     (void)offset; (void)whence;
     if(proxy_bound && fd >= 0 && fd <= 2) {
         errno = proxy_closed[fd] ? EBADF : ESPIPE;
@@ -417,13 +493,31 @@ int _kill(int pid, int sig)
 
 int _open(const char *path, int flags, ...)
 {
-    (void)path; (void)flags;
-    errno = ENOSYS; /* no ambient pathname namespace */
-    return -1;
+    unsigned rights = 0;
+    int acc, result;
+    if(!files_bound) { errno = ENOSYS; return -1; }
+    if(!path) { errno = EFAULT; return -1; }
+    acc = flags & O_ACCMODE;
+    if(acc == O_RDONLY) rights=UXFD_READ;
+    else if(acc == O_WRONLY) rights=UXFD_WRITE;
+    else if(acc == O_RDWR) rights=UXFD_READ|UXFD_WRITE;
+    else { errno = EINVAL; return -1; }
+    if(flags & O_CREAT) rights |= UXFD_CREATE;
+    if(flags & O_TRUNC) rights |= UXFD_TRUNC;
+    if(flags & O_APPEND) rights |= UXFD_APPEND;
+#ifdef O_EXCL
+    if(flags & O_EXCL) { errno = ENOSYS; return -1; }
+#endif
+    result = uxfd_open(&file_table,path,rights);
+    return result >= 0 ? result : fail_fs(result);
 }
 int _unlink(const char *path)
 {
-    (void)path; errno = ENOSYS; return -1;
+    int result;
+    if(!files_bound) { errno = ENOSYS; return -1; }
+    if(!path) { errno = EFAULT; return -1; }
+    result = uxfd_unlink(&file_table,path);
+    return result == PVD_OK ? 0 : fail_fs(result);
 }
 int _link(const char *existing, const char *newpath)
 {
@@ -431,7 +525,18 @@ int _link(const char *existing, const char *newpath)
 }
 int _stat(const char *path, struct stat *st)
 {
-    (void)path; (void)st; errno = ENOSYS; return -1;
+    unsigned kind, length;
+    int result;
+    if(!files_bound) { errno = ENOSYS; return -1; }
+    if(!path || !st) { errno = EFAULT; return -1; }
+    result=uxfs_info(&file_table.service->fs,path,&kind,&length);
+    if(result) return fail_fs(result);
+    memset(st,0,sizeof *st);
+    st->st_mode=(kind == UXFS_DIR ? S_IFDIR : S_IFREG) | 0600;
+    st->st_size=length;
+    st->st_nlink=1;
+    st->st_blksize=UXFS_DATA_MAX;
+    return 0;
 }
 int _fork(void)
 {

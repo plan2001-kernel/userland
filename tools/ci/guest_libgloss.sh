@@ -55,7 +55,7 @@ fi
 log="$OUT/boot-libglossboot.log"
 grep -aqF 'o: OEXECUTE oid=0x4f45584543000003' "$log"
 for op in READ SBRK WRITE; do
-  grep -aqF "PLAN2001-LIBGLOSS-$op-OK" "$log"
+  grep -aqF "PLAN2001-LIBGLOSS-$op-PASS" "$log"
 done
 grep -aqF 'PLAN2001-LIBGLOSS-GUEST-PASS' "$log"
 if grep -aqF 'PLAN2001-LIBGLOSS-GUEST-FAIL' "$log"; then

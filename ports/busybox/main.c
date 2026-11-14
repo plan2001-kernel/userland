@@ -12,6 +12,8 @@ extern int true_main(int argc, char **argv);
 extern int false_main(int argc, char **argv);
 extern int echo_main(int argc, char **argv);
 extern int p2001_ls_main(int argc, char **argv);
+extern int p2001_uxpipe_send_main(int argc, char **argv);
+extern int p2001_uxpipe_recv_main(int argc, char **argv);
 extern int strcmp(const char *a, const char *b);
 extern long sleep(long millis);
 extern void exits(char *);
@@ -47,6 +49,10 @@ int plan2001_busybox_dispatch(int argc, char **argv)
         return echo_main(argc, argv);
     if (strcmp(name, "ls") == 0)
         return p2001_ls_main(argc, argv);
+    if (strcmp(name, "uxpipe-send") == 0)
+        return p2001_uxpipe_send_main(argc, argv);
+    if (strcmp(name, "uxpipe-recv") == 0)
+        return p2001_uxpipe_recv_main(argc, argv);
     return 127;
 }
 

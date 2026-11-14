@@ -1,0 +1,72 @@
+name: Newlib real libc and native Plan2001 runtime
+
+on:
+  push:
+    branches: [experiment/newlib-ci]
+    paths:
+      - '.github/workflows/newlib-libc.yml'
+      - 'ports/newlib/**'
+      - 'tools/ci/build_newlib_libc.sh'
+      - 'tools/ci/newlib_full_*.py'
+      - 'tools/ci/newlib_full_*.sh'
+  pull_request:
+    paths:
+      - '.github/workflows/newlib-libc.yml'
+      - 'ports/newlib/**'
+      - 'tools/ci/build_newlib_libc.sh'
+      - 'tools/ci/newlib_full_*.py'
+      - 'tools/ci/newlib_full_*.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-newlib:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Newlib build tools and native Plan2001 QEMU dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc-14 g++-14 binutils make git \
+            autoconf automake libtool texinfo flex bison \
+            python3 curl file mtools ovmf qemu-system-x86
+
+      - name: Build real upstream Newlib 4.6.0 libc.a/libm.a
+        run: |
+          bash tools/ci/build_newlib_libc.sh \
+            "$RUNNER_TEMP/newlib-pinned" "$RUNNER_TEMP/newlib-reports"
+
+      - name: Report results
+        if: always()
+        run: |
+          {
+            echo '# Full Newlib libc.a port'
+            if [ -f "$RUNNER_TEMP/newlib-reports/newlib-full-build.md" ]; then
+              cat "$RUNNER_TEMP/newlib-reports/newlib-full-build.md"
+            else
+              echo 'Full Newlib build: **NOT COMPLETED**'
+              if [ -f "$RUNNER_TEMP/newlib-reports/newlib-full-build.log" ]; then
+                echo 'Consult attached configure/make log'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Newlib archives, provenance and build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newlib-full-libc-amd64
+          path: |
+            ${{ runner.temp }}/newlib-reports/newlib-full-build.log
+            ${{ runner.temp }}/newlib-reports/newlib-full-build.md
+            ${{ runner.temp }}/newlib-reports/newlib-full/libc.a
+            ${{ runner.temp }}/newlib-reports/newlib-full/libm.a
+            ${{ runner.temp }}/newlib-reports/newlib-full/*.members
+            ${{ runner.temp }}/newlib-reports/newlib-full/SHA256SUMS
+          if-no-files-found: warn
+          retention-days: 14

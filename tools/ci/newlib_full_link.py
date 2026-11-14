@@ -103,6 +103,13 @@ def main():
             path = build / (key + ".o")
             run(cflags + ["-c", str(source), "-o", str(path)], log)
             objects[key] = path
+        # Native SLEEP and ALARM are millisecond Plan9 syscalls, not POSIX
+        # sleep()/alarm(). Rename those two entries in a disposable copy
+        # before linking Newlib, then provide a genuine POSIX sleep wrapper.
+        native_stubs = build / "rt_stubs-newlib.o"
+        run(["objcopy", "--redefine-sym", "sleep=p9_native_sleep_millis",
+             "--redefine-sym", "alarm=p9_native_alarm_millis",
+             str(stubs), str(native_stubs)], log)
         audits = []
         for kind, program in (("boot", "boot"), ("exit", "child")):
             elf = build / ("newlib-" + kind + ".elf")
@@ -113,7 +120,7 @@ def main():
                 "-Wl,-z,noexecstack", "-Wl,--gc-sections",
                 "-Wl,--build-id=none", "-o", str(elf),
                 str(startup), str(objects["startup"]), str(objects[program]),
-                str(objects["syscalls"]), str(objects["posix"]), str(stubs),
+                str(objects["syscalls"]), str(objects["posix"]), str(native_stubs),
                 "-Wl,--start-group", str(libc), str(libm),
                 "-lgcc", "-Wl,--end-group",
             ]
@@ -135,6 +142,7 @@ def main():
                 "plan2001_libc_user_linked": False,
                 "real_newlib_libc_linked": True,
                 "real_newlib_libm_linked": True,
+                "native_sleep_alarm_symbols_renamed_to_avoid_posix_collision": True,
                 "targets": audits,
                 "qemu": "NOT RUN in this build stage",
             }, indent=2) + "\n")

@@ -110,6 +110,7 @@ def main() -> None:
               UNIX / "pvd.c", UNIX / "pvd.h", UNIX / "init.c",
               UNIX / "init.h", UNIX / "uxfs.c", UNIX / "uxfs.h",
               UNIX / "uxgeo.c", UNIX / "uxgeo.h",
+              UNIX / "uxservice.c", UNIX / "uxservice.h",
               UNIX / "uxshell.c", UNIX / "uxshell.h",
               UNIX / "uxspawn.c", UNIX / "uxspawn.h",
               UNIX / "uxexternal.c", UNIX / "uxexternal.h",
@@ -161,6 +162,7 @@ def main() -> None:
                              ("uxfs", UNIX / "uxfs.c"),
                              ("uxgeo", UNIX / "uxgeo.c"),
                              ("uxshell", UNIX / "uxshell.c"),
+                             ("uxservice", UNIX / "uxservice.c"),
                              ("uxspawn", UNIX / "uxspawn.c"),
                              ("uxexternal", UNIX / "uxexternal.c"),
                              ("supervisor", UNIX / "supervisor.c")):

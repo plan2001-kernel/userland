@@ -41,6 +41,8 @@ int uxfs_path(const UxFs *fs, const char *path, char out[PVD_PATH_MAX]);
 int uxfs_mkdir(UxFs *fs, const char *path);
 int uxfs_write(UxFs *fs, const char *path, const void *buf,
                unsigned int size, int append);
+int uxfs_info(UxFs *fs, const char *path, unsigned int *kind,
+              unsigned int *length);
 int uxfs_read(UxFs *fs, const char *path, void *buf,
               unsigned int capacity, unsigned int *size);
 int uxfs_copy(UxFs *fs, const char *src, const char *dest);

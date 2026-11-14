@@ -146,6 +146,16 @@ try:
         result = waitscreen("newlib-delegated-read",
                             "PLAN2001-NEWLIB-DELEGATED-STDIN-PASS:pipeok")
         assert "PLAN2001-NEWLIB-DELEGATED-FAIL" not in result
+        # Wait for the child to close all three delegated descriptors and
+        # exit; the trusted supervisor must then release its F5 session.
+        ended = False
+        until = time.monotonic() + 20
+        while time.monotonic() < until:
+            if "console: session unixInitF5 pid=" in serial.read_text(errors="replace"):
+                ended = True
+                break
+            time.sleep(0.3)
+        assert ended, "Newlib child did not finish and release F5 session"
         print("PASS: Newlib public read(0)/write(1,2), delegated F5 "
               "capabilities, EOF and console isolation in real QEMU")
     else:

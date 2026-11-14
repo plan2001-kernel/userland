@@ -65,7 +65,7 @@ def check_elf(elf: Path, reports: Path, title: str) -> dict:
         for sym in ("full_read", "p2001_session_read", "p2001_session_write",
                     "region_wait", "region_wake",
                     "pvd_bootstrap", "pvd_chdir", "pvd_getcwd",
-                    "pvd_list", "pvd_cli_run",
+                    "uxfs_list", "uxshell_eval",
                     "p2001_unix_init", "p2001_f5_shell"):
             if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
                 raise RuntimeError(f"{title}: missing console symbol {sym}")

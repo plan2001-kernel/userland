@@ -1,0 +1,124 @@
+name: Newlib native Plan2001 QEMU experiment
+
+on:
+  push:
+    branches: [experiment/newlib-ci]
+    paths:
+      - '.github/workflows/newlib-probe.yml'
+      - 'ports/newlib/**'
+      - 'tools/ci/newlib_probe.py'
+      - 'tools/ci/guest_newlib.sh'
+  pull_request:
+    paths:
+      - '.github/workflows/newlib-probe.yml'
+      - 'ports/newlib/**'
+      - 'tools/ci/newlib_probe.py'
+      - 'tools/ci/guest_newlib.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  newlib-native-qemu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Check out Userland
+        uses: actions/checkout@v4
+
+      - name: Install AMD64 build, QEMU and OVMF dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc-14 binutils clang lld file mtools ovmf \
+            qemu-system-x86 python3 curl
+
+      - name: Fetch exact pinned Plan2001 kernel and BusyBox sources
+        run: |
+          python3 tools/ci/fetch_sources.py \
+            --lock config/sources.json \
+            --dest "$RUNNER_TEMP/plan2001-sources" \
+            --reports "$RUNNER_TEMP/plan2001-reports"
+
+      - name: Download and SHA-256 verify Newlib 4.6.0
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/newlib-source"
+          curl -fL --retry 3 --connect-timeout 20 \
+            https://mirrors.kernel.org/sourceware/newlib/newlib-4.6.0.20260123.tar.gz \
+            -o "$RUNNER_TEMP/newlib.tar.gz"
+          echo "6ff27e3bf022666f43f7802255be680eeff722ac181b1725d21e2e8318604ee3  $RUNNER_TEMP/newlib.tar.gz" \
+            | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/newlib.tar.gz" -C "$RUNNER_TEMP/newlib-source" \
+            --no-same-owner
+          test -f "$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123/newlib/libc/string/strlcpy.c"
+          test -f "$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123/newlib/libc/string/strlcat.c"
+          test -f "$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123/newlib/libc/string/strnlen.c"
+
+      - name: Build real Plan2001 AMD64 kernel, UEFI loader
+        env:
+          CC: gcc-14
+        working-directory: ${{ runner.temp }}/plan2001-sources/kernel
+        run: |
+          tools/build-gcc.sh --kernel -j 4
+          tools/build-efi-gcc.sh -j 4
+
+      - name: Build native Plan2001 runtime and volume tools
+        env:
+          CC: gcc-14
+        working-directory: ${{ runner.temp }}/plan2001-sources/kernel
+        run: |
+          tools/build-mpy-gcc.sh -j 4
+          tools/build.sh
+
+      - name: Compile and statically link original Newlib routines as native ELF
+        run: |
+          python3 tools/ci/newlib_probe.py \
+            --kernel "$RUNNER_TEMP/plan2001-sources/kernel" \
+            --newlib "$RUNNER_TEMP/newlib-source/newlib-4.6.0.20260123" \
+            --reports "$RUNNER_TEMP/plan2001-reports" --cc gcc-14
+
+      - name: Boot and verify Newlib routines in actual Plan2001 QEMU
+        run: |
+          bash tools/ci/guest_newlib.sh \
+            "$RUNNER_TEMP/plan2001-sources/kernel" \
+            "$RUNNER_TEMP/plan2001-reports/newlib-probe/newlib-plan2001.elf" \
+            "$RUNNER_TEMP/plan2001-reports"
+
+      - name: Summarize real results and limitations
+        if: always()
+        run: |
+          {
+            echo '## Newlib trial, AMD64 native Plan2001'
+            if [ -f "$RUNNER_TEMP/plan2001-reports/newlib-probe.md" ]; then
+              cat "$RUNNER_TEMP/plan2001-reports/newlib-probe.md"
+            else
+              echo 'Newlib source/native build: **NOT COMPLETED**.'
+            fi
+            if [ -f "$RUNNER_TEMP/plan2001-reports/newlib-guest.md" ]; then
+              cat "$RUNNER_TEMP/plan2001-reports/newlib-guest.md"
+            else
+              echo 'Real Plan2001 QEMU execution: **NOT COMPLETED**.'
+            fi
+            echo
+            echo '**Not tested:** full Newlib, newlib-nano, libgloss, POSIX I/O,'
+            echo 'BusyBox with Newlib, ABI-wide compatibility or physical hardware.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload native Newlib ELF and CI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newlib-native-plan2001-qemu
+          path: |
+            ${{ runner.temp }}/plan2001-reports/newlib-probe/*.elf
+            ${{ runner.temp }}/plan2001-reports/newlib-probe/*.txt
+            ${{ runner.temp }}/plan2001-reports/newlib-probe/*.json
+            ${{ runner.temp }}/plan2001-reports/newlib-probe.md
+            ${{ runner.temp }}/plan2001-reports/newlib-probe.log
+            ${{ runner.temp }}/plan2001-reports/newlib-guest.md
+            ${{ runner.temp }}/plan2001-reports/qemu-newlib/*.log
+            ${{ runner.temp }}/plan2001-reports/qemu-newlib/*.json
+          if-no-files-found: warn
+          retention-days: 14

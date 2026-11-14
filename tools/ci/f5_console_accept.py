@@ -78,7 +78,8 @@ def focus(number):
 
 
 def enter(line):
-    specials = {" ": "spc", "/": "slash", ".": "dot"}
+    specials = {" ": "spc", "/": "slash", ".": "dot",
+                ">": "shift-dot", "|": "shift-backslash"}
     for letter in line:
         key(specials.get(letter, letter))
     key("ret")
@@ -173,6 +174,25 @@ try:
         enter("cd ../../../../")
         enter("pwd")
         waitscreen("pvd-root-confined", "\n/\nunix:/$")
+        # Stage 4/7: these new paths and redirections execute inside the
+        # actual F5 native ELF, with QEMU PS/2 keys and framebuffer output.
+        enter("echo test > /tmp/file")
+        enter("cat /tmp/file")
+        waitscreen("uxfs-redirection-cat", "\\ntest\\nunix:/$")
+        enter("echo more >> /tmp/file")
+        enter("cat /tmp/file")
+        waitscreen("uxfs-append-cat", "\\ntest\\nmore\\nunix:/$")
+        enter("cat /tmp/file | cat")
+        waitscreen("uxfs-pipeline-cat", "\\ntest\\nmore\\nunix:/$")
+        enter("mkdir /tmp/newdir")
+        enter("cp /tmp/file /tmp/newdir/copy")
+        enter("mv /tmp/newdir/copy /tmp/newdir/moved")
+        enter("cat /tmp/newdir/moved")
+        waitscreen("uxfs-copy-move-cat", "\\ntest\\nmore\\nunix:/$")
+        enter("rm /tmp/newdir/moved")
+        enter("cat /tmp/newdir/moved")
+        waitscreen("uxfs-rm-denies", "cat: no such directory")
+
         # End boot 1 in a non-root directory, verified before stopping QEMU.
         enter("cd /usr/bin")
         enter("pwd")

@@ -60,9 +60,10 @@ cat >"$REPORTS/busybox-spawn-guest.md" <<'EOF'
 - **PASS:** Boot executable is the native MicroPython ELF at OID 0x4f45584543000003, not a BusyBox smoke harness.
 - **PASS:** The normal three-applet BusyBox ELF is separately installed at GE/O OID 0x4f45584543000005 with SHA-256 verification.
 - **PASS:** MicroPython space.spawn(oid, argv=..., vhandles=[(region, 256)]) creates a new process with an explicit writable output capability; plan9.process_wait(process_handle, 30000) observes normal exit.
-- **PASS:** A separate native ls process reads an explicitly delegated RO directory-name snapshot (Vread) and writes to a separate output region (Vwrite). Parent verifies the complete ls listing before printing EXTERNAL-LS-PASS. This is a real guest SPAWN/ProcessWait, not a stub; it is NOT yet the F5 shell's external ls integration.\n- **PASS:** Original BusyBox echo.c publishes stdout into an explicitly delegated writable region; the MicroPython parent reads it RO and forwards it through its authorized console. True returns success and false returns failure status.
+- **PASS:** A separate native ls process reads an explicitly delegated RO directory-name snapshot (Vread) and writes to a separate output region (Vwrite). Parent verifies the complete ls listing before printing EXTERNAL-LS-PASS. This is a real guest SPAWN/ProcessWait, not a stub; it is NOT yet the F5 shell's external ls integration.
+- **PASS:** Original BusyBox echo.c publishes stdout into an explicitly delegated writable region; the MicroPython parent reads it RO and forwards it through its authorized console. True returns success and false returns failure status.
 - **PASS:** MicroPython init.run() returns zero after all child-process assertions.
-- **LIMITATION:** Three-applet native BusyBox subset, not the full BusyBox or a POSIX fd layer.
+- **LIMITATION:** Original BusyBox true/false/echo + one Plan2001-specific ls applet (not upstream BusyBox ls), not a full BusyBox build or POSIX fd layer.
 - **NOT RUN:** Physical hardware, full shell, full BusyBox.
 EOF
 echo "Plan2001 QEMU: MicroPython SPAWN/wait for native BusyBox child PASS ($log)"

@@ -85,6 +85,7 @@ def main():
         "startup": PORT / "p9_newlib_start.c",
         "boot": PORT / "newlib_stdio_probe.c",
         "child": PORT / "newlib_exit_child.c",
+        "supervised": PORT / "newlib_supervised_child.c",
     }
     inputs = [libc, libm, include / "stdio.h", startup, stubs, *sources.values(),
               PORT / "user-newlib.ld"]
@@ -117,7 +118,8 @@ def main():
              "--redefine-sym", "alarm=p9_native_alarm_millis",
              str(stubs), str(native_stubs)], log)
         audits = []
-        for kind, program in (("boot", "boot"), ("exit", "child")):
+        for kind, program in (("boot", "boot"), ("exit", "child"),
+                              ("supervised", "supervised")):
             elf = build / ("newlib-" + kind + ".elf")
             link = [
                 args.cc, "-m64", "-nostdlib", "-nostartfiles",
@@ -140,6 +142,9 @@ def main():
                 required += ["_read", "_write", "_sbrk", "uxpipe_bind", "p9_full_bind_uxpipe", "p9_full_bind_files", "read", "write",
                              "sbrk", "malloc", "free", "_impure_ptr",
                              "printf", "snprintf", "strtol", "sin"]
+            if kind == "supervised":
+                required += ["p9_full_bind_inherited_uxpipe", "read", "write",
+                             "close", "fstat", "uxpipe_read", "uxpipe_write"]
             audits.append(audit(elf, build, required))
         (build / "result.json").write_text(
             json.dumps({
@@ -156,7 +161,7 @@ def main():
             }, indent=2) + "\n")
         report.write_text(
             "### Genuine Newlib libc target link\n\n"
-            "- PASS: two static Plan2001 native AMD64 ELFs linked with "
+            "- PASS: three static Plan2001 native AMD64 ELFs linked with "
             "full upstream Newlib libc.a/libm.a.\n"
             "- PASS: NO Plan2001 libc-user.a; Newlib malloc/stdio/reentrancy "
             "resolved, no unresolved symbols or dynamic loader.\n"

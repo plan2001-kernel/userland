@@ -41,7 +41,17 @@ case "$STAGE" in
     "$CC" -std=gnu11 -m64 -O2 -ffreestanding -nostdinc -fno-builtin \
       -Wall -Wextra -Werror -I"$KERNEL/runtime/abi" \
       -I"$ROOT/ports/unix" -c "$ROOT/ports/unix/uxexternal.c" -o "$OUT/native-external.o"
-    echo "PASS: freestanding SPAWN, external ls and F5 adapter translation units compile"
+    "$CC" "${BASE[@]}" -I"$KERNEL/runtime/abi" \
+      "$ROOT/tests/host/test_supervisor.c" \
+      "$ROOT/ports/unix/supervisor.c" \
+      "$ROOT/ports/unix/uxspawn.c" "$ROOT/ports/unix/uxpipe.c" \
+      -o "$OUT/unix-supervisor"
+    "$OUT/unix-supervisor"
+    "$CC" -std=gnu11 -m64 -O2 -ffreestanding -nostdinc -fno-builtin \
+      -Wall -Wextra -Werror -I"$KERNEL/runtime/abi" \
+      -I"$ROOT/ports/unix" -c "$ROOT/ports/unix/supervisor.c" \
+      -o "$OUT/native-supervisor.o"
+    echo "PASS: freestanding SPAWN, external ls, F5 adapter and Unix supervisor"
     ;;
   7)
     "$CC" "${BASE[@]}" "$ROOT/tests/host/test_uxshell.c" \

@@ -1,6 +1,6 @@
 # Plan 2001: real Newlib libc port and acceptance criteria
 
-Status: active experimental branch `experiment/newlib-ci`. Pinned kernel ABI:
+Status: acceptance PASS on the experimental branch `experiment/newlib-ci`. Pinned kernel ABI:
 `82814608dff31f2b33e34689821c468b69d7641e`. Newlib release:
 `newlib-4.6.0` (Git commit `8ba4275b83ec27529f67e0d477611fa6d8d6e6bd`).
 
@@ -55,3 +55,34 @@ kernel's object/region and process semantics, with no kernel modifications.
   Native guest execution is mandatory.
 - Avoid reformatting any existing GE/O volume: QEMU CI creates
   disposable regular-file images only.
+
+## Completion record (2026-11-14)
+
+All five scoped port phases above are implemented and verified:
+
+1. **PASS:** Newlib 4.6.0 complete `libc.a` and `libm.a` built
+   from the exact pinned upstream Git commit, public headers installed.
+2. **PASS:** Native Plan 2001 libgloss/POSIX syscall adapters implemented
+   with capability-bound stdin/stdout and correct error behavior for
+   unsupported operations. The code uses Newlib's own errno.
+3. **PASS:** Native static AMD64 ELFs link with real Newlib libc/libm,
+   target crt and kernel-only syscall stubs, **without** Plan 2001's
+   previous `libc-user.a`. ELF and symbol audits completed.
+4. **PASS:** Real Plan 2001 kernel QEMU boot executes Newlib stdio,
+   heap, math, errno and capability stdin tests. Separate native Newlib
+   child processes exercise exit success and failure. Native time and
+   POSIX sleep seconds also tested.
+5. **PASS:** Repeatable GitHub Actions workflow, downloadable build
+   and QEMU artifacts, implementation documentation and a draft PR.
+   Existing separate Newlib-subset/libgloss smoke tests remain available.
+
+Evidence: https://github.com/plan2001-kernel/userland/actions/runs/43586391276
+Documentation: ports/newlib/full/README.md
+PR: https://github.com/plan2001-kernel/userland/pull/11
+
+This closes the **single-threaded full-Newlib libc port** scope, not
+general POSIX compatibility or a complete Unix userland. In particular,
+the kernel was not changed, the numerical POSIX exit code is not retained,
+the pathname/FD namespace is not fully implemented, and physical
+hardware was not tested. These are explicit future compatibility
+workstreams rather than hidden failures.

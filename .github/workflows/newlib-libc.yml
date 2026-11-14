@@ -97,14 +97,14 @@ jobs:
             --elf "$RUNNER_TEMP/newlib-reports/busybox-target/unix-supervisor-f5-plan2001.elf" \
             --extra-elf "$RUNNER_TEMP/newlib-reports/newlib-target/newlib-supervised.elf" \
             --init tests/guest/busybox_spawn_init.py \
-            --image "$RUNNER_TEMP/newlib-reports/newlib-supervised-o.img" \
-            --reports "$RUNNER_TEMP/newlib-reports"
+            --image "$RUNNER_TEMP/newlib-reports/supervisor-seed/newlib-supervised-o.img" \
+            --reports "$RUNNER_TEMP/newlib-reports/supervisor-seed"
 
       - name: Verify Newlib read/write on actual supervisor Oinheritv streams in QEMU
         run: |
           bash tools/ci/guest_busybox_f5.sh \
             "$RUNNER_TEMP/plan2001-sources/kernel" \
-            "$RUNNER_TEMP/newlib-reports/newlib-supervised-o.img" \
+            "$RUNNER_TEMP/newlib-reports/supervisor-seed/newlib-supervised-o.img" \
             "$RUNNER_TEMP/newlib-reports" newlib-supervised
 
       - name: Seed native MicroPython and Newlib exit child into fresh GE/O
@@ -164,6 +164,8 @@ jobs:
             ${{ runner.temp }}/newlib-reports/newlib-target-build.log
             ${{ runner.temp }}/newlib-reports/newlib-full-guest.md
             ${{ runner.temp }}/newlib-reports/newlib-supervised-guest.md
+            ${{ runner.temp }}/newlib-reports/supervisor-seed/*.log
+            ${{ runner.temp }}/newlib-reports/supervisor-seed/*.json
             ${{ runner.temp }}/newlib-reports/qemu-busybox-f5/*.log
             ${{ runner.temp }}/newlib-reports/qemu-busybox-f5/screens/**/*.txt
             ${{ runner.temp }}/newlib-reports/qemu-busybox-f5/screens/**/*.ppm

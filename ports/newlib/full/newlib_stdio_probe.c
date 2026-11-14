@@ -13,7 +13,6 @@
 #include "obj.h"
 #include "plan2001_full.h"
 
-extern long sleep(long millis);
 extern int _fstat(int fd, struct stat *st);
 extern int _open(const char *path, int flags, ...);
 extern void _exit(int status);

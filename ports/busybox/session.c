@@ -70,8 +70,11 @@ int p2001_session_probe(void)
             inh = (int)handles[i].handle;
         }
     }
-    /* Old SPAWN adapter receives one delegated Vwrite-only region. */
-    if (inh < 0 && diagh < 0) {
+    /* Native SPAWN fixtures may receive one RO file-view region and
+     * one RW output region. Neither is a kernel console session. The
+     * exact three-grant session contract is mandatory for console access.
+     */
+    if (diagh < 0) {
         probe_state = -1;
         return 0;
     }

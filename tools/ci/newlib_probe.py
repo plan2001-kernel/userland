@@ -99,7 +99,7 @@ def main():
         (dst / "elf-audit.txt").write_text(h + "\n" + ph + "\n" + d + "\n" + syms)
         info = {
             "newlib_release": "4.6.0.20260123",
-            "newlib_sha256": "6ff27e3bf022666f43f7802255be680eeff722ac181b1725d21e2e8318604ee3",
+            "newlib_source_commit": "8ba4275b83ec27529f67e0d477611fa6d8d6e6bd",
             "unchanged_upstream_sources": list(SRC_NAMES),
             "kernel_sha": capture("git", "-C", str(a.kernel), "rev-parse", "HEAD").strip(),
             "native_elf_sha256": hashlib.sha256(elf.read_bytes()).hexdigest(),
@@ -108,7 +108,7 @@ def main():
         }
         (dst / "build.json").write_text(json.dumps(info, indent=2) + "\n")
         report.write_text("### Newlib native build\n\n"
-                          "- **PASS:** unchanged SHA-256-pinned Newlib 4.6.0 strlcpy, strlcat, strnlen compiled.\n"
+                          "- **PASS:** unchanged commit-pinned Newlib 4.6.0 strlcpy, strlcat, strnlen compiled.\n"
                           "- **PASS:** native static AMD64 ET_EXEC, two PT_LOADs, symbols present, no Linux libc/dynamic loader.\n"
                           "- **NOT RUN here:** real-kernel QEMU guest (separate CI step).\n"
                           "- **NOT RUN:** full Newlib, libc replacement, libgloss, POSIX I/O, BusyBox linked with Newlib.\n")

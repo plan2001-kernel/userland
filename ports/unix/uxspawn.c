@@ -5,9 +5,13 @@
 #include "uxspawn.h"
 #include "obj.h"
 #include "vobj.h"
+/* Packed native Ospawn followed by Oinheritv (flags=2), all u64.
+ * Kernel ABI layout is specified in runtime/abi/sys.h.
+ */
 struct SpawnGrants {
-    struct Ospawn options;
-    struct Oinheritv inherited;
+    unsigned long long cpu, membudget, flags;
+    unsigned long long nhandles;
+    struct { unsigned long long handle, rights; } grant[8];
 };
 int uxspawn_start(const UxLaunch *launch, char **argv, int argc)
 {
@@ -16,20 +20,20 @@ int uxspawn_start(const UxLaunch *launch, char **argv, int argc)
     if (!launch || launch->executable_volume <= 0 || !launch->oid ||
         !argv || argc <= 0 || launch->grant_count > 3)
         return -1;
-    opts.options.cpu = ~0ULL;
-    opts.options.membudget = 0;
-    opts.options.flags = 2;             /* native Oinheritv */
-    opts.inherited.nhandles = launch->grant_count;
+    opts.cpu = ~0ULL;
+    opts.membudget = 0;
+    opts.flags = 2;             /* native Oinheritv */
+    opts.nhandles = launch->grant_count;
     for (i = 0; i < launch->grant_count; ++i) {
         if (launch->grant[i].handle <= 0 ||
             !(launch->grant[i].rights & (Vread | Vwrite)) ||
             (launch->grant[i].rights & ~(Vread|Vwrite|Vmeta)) != 0)
             return -1;
-        opts.inherited.h[i].handle = (unsigned long long)launch->grant[i].handle;
-        opts.inherited.h[i].rights = launch->grant[i].rights;
+        opts.grant[i].handle = (unsigned long long)launch->grant[i].handle;
+        opts.grant[i].rights = launch->grant[i].rights;
     }
     return (int)obj_ospawn(launch->executable_volume, launch->oid,
-                           argv, argc, &opts.options);
+                           argv, argc, (struct Ospawn *)&opts);
 }
 int uxspawn_wait(int process, long long timeout, int *exited_ok)
 {

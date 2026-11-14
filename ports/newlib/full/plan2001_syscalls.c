@@ -28,6 +28,7 @@ extern long objclose(int);
 extern long regionwait(unsigned long long, unsigned long long,
                        unsigned long long, long long);
 extern long brk_(void *);
+extern unsigned long long _nsec(void);
 extern void _exits(char *);
 extern char end[];
 
@@ -344,6 +345,16 @@ clock_t _times(struct tms *t)
 }
 int _gettimeofday(struct timeval *tv, void *tz)
 {
-    (void)tv; (void)tz;
-    errno = ENOSYS; return -1;
+    unsigned long long ns;
+    if(tv == 0) { errno = EFAULT; return -1; }
+    ns = _nsec(); /* Direct native _NSEC(53), UTC nanoseconds since epoch. */
+    tv->tv_sec = (time_t)(ns / 1000000000ULL);
+    tv->tv_usec = (suseconds_t)((ns % 1000000000ULL) / 1000ULL);
+    if(tz != 0) {
+        /* Legacy timezone output: UTC; no per-process timezone service. */
+        struct timezone *zone = (struct timezone *)tz;
+        zone->tz_minuteswest = 0;
+        zone->tz_dsttime = 0;
+    }
+    return 0;
 }

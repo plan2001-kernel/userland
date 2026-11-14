@@ -32,7 +32,16 @@ case "$STAGE" in
       -Wall -Wextra -Werror -I"$KERNEL/runtime/abi" \
       -I"$ROOT/ports/busybox" \
       -c "$ROOT/ports/busybox/ls_child.c" -o "$OUT/native-ls.o"
-    echo "PASS: native-target freestanding SPAWN and external ls translation units compile"
+    "$CC" "${BASE[@]}" -I"$KERNEL/runtime/abi" \
+      "$ROOT/tests/host/test_uxexternal.c" \
+      "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
+      "$ROOT/ports/unix/uxexternal.c" "$ROOT/ports/unix/uxspawn.c" \
+      -o "$OUT/uxexternal"
+    "$OUT/uxexternal"
+    "$CC" -std=gnu11 -m64 -O2 -ffreestanding -nostdinc -fno-builtin \
+      -Wall -Wextra -Werror -I"$KERNEL/runtime/abi" \
+      -I"$ROOT/ports/unix" -c "$ROOT/ports/unix/uxexternal.c" -o "$OUT/native-external.o"
+    echo "PASS: freestanding SPAWN, external ls and F5 adapter translation units compile"
     ;;
   7)
     "$CC" "${BASE[@]}" "$ROOT/tests/host/test_uxshell.c" \

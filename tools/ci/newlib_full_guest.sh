@@ -47,7 +47,7 @@ qob_make_esp "$OUT/plan9.ini" "$OUT/esp.img"
 qob_make_disk "$OUT/o.img" "$OUT/disk.img" "$OUT/esp.img" \
   "$puuid" "$OUT/disk.layout"
 if ! qob_boot_once "$OUT/disk.img" newlib-fullboot \
-      'PLAN2001-NEWLIB-FULL-GUEST-PASS' norepl "" ""; then
+      'PLAN2001-NEWLIB-FULL-PASS' norepl "" ""; then
   echo "newlib-full QEMU guest FAILED: $QOB_BOOT_REASON" >&2
   tail -90 "$OUT/boot-newlib-fullboot.log" >&2 || true
   exit 1
@@ -57,7 +57,7 @@ grep -aqF 'o: OEXECUTE oid=0x4f45584543000003' "$log"
 for op in PRINTF MALLOC LIBM ERRNO STDIN; do
   grep -aqF "PLAN2001-NEWLIB-FULL-$op-PASS" "$log"
 done
-grep -aqF 'PLAN2001-NEWLIB-FULL-GUEST-PASS' "$log"
+grep -aqF 'PLAN2001-NEWLIB-FULL-PASS' "$log"
 if grep -aqF 'PLAN2001-NEWLIB-FULL-GUEST-FAIL' "$log"; then
   echo "Native newlib-full probe emitted failure marker" >&2
   exit 1
@@ -67,7 +67,7 @@ cat > "$REPORTS/newlib-full-guest.md" <<'EOF'
 
 - **PASS:** native ELF seeded in disposable GE/O and verified by SHA-256.
 - **PASS:** Plan2001 OEXECUTEd the ELF under QEMU/OVMF.
-- **PASS:** native input ring _read, authorized console _write and BRK-backed _sbrk exercised in guest.
+- **PASS:** upstream libc printf/snprintf, malloc/free, strtol, errno and libm executed; the native stdin ring and authorized stdout were exercised.
 - **PASS:** no Plan2001 libc-user.a; native syscall stubs, target crt and upstream Newlib libc/libm.
 - **NOT RUN:** complete POSIX namespace, multithreading, hardware.
 EOF

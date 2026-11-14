@@ -108,7 +108,8 @@ def main():
         objects = {}
         for key, source in sources.items():
             path = build / (key + ".o")
-            run(cflags + ["-c", str(source), "-o", str(path)], log)
+            flags = (["-DPLAN2001_UXPIPE_NEWLIB=1"] if key == "pipe" else [])
+            run(cflags + flags + ["-c", str(source), "-o", str(path)], log)
             objects[key] = path
         # Native SLEEP and ALARM are millisecond Plan9 syscalls, not POSIX
         # sleep()/alarm(). Rename those two entries in a disposable copy

@@ -404,12 +404,9 @@ int uxfs_restore(UxFs *fs, const UxStore *s, UxOid manifest)
     for (i = 0; i < UXFS_NODES; ++i) {
         UxNode *p = &staged.nodes[i];
         if (p->kind == UXFS_DIR) {
-            unsigned int depthstack[PVD_MAX_DEPTH], d;
             /* Directory must be reachable through PVD, not merely named
              * in untrusted metadata. chdir on scratch provides validation.
              */
-            (void)depthstack;
-            (void)d;
             if (pvd_chdir(&staged_view, p->path) != PVD_OK)
                 return PVD_EIO;
             if (pvd_chdir(&staged_view, "/") != PVD_OK)

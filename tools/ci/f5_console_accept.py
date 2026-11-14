@@ -162,6 +162,17 @@ try:
         waitscreen("pvd-pwd-root", "\n/\nunix:/$")
         enter("ls")
         waitscreen("pvd-ls-root", "\nbin\ndev\netc\nhome\ntmp\nusr\nvar\n")
+        # The manifest boots the trusted supervisor (first SPAWN); the
+        # shell's ls request must start a second native child rather than
+        # quietly using the in-process fallback. Both use the same seeded
+        # child ELF OID, but separate kernel Process Handles.
+        spawns = re.findall(
+            r"o: SPAWN pid=[^\\n]* oid=0x4f45584543000006",
+            serial.read_text(errors="replace"))
+        assert len(spawns) >= 2, (
+            "F5 ls did not execute as a second native SPAWN process: "
+            + str(spawns)
+        )
         enter("cd /usr/bin")
         enter("pwd")
         waitscreen("pvd-pwd-bin", "\n/usr/bin\nunix:/usr/bin$")

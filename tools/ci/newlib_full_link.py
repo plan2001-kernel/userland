@@ -75,6 +75,7 @@ def main():
     stubs = runtime / "rt_stubs.o"
     sources = {
         "syscalls": PORT / "plan2001_syscalls.c",
+        "posix": PORT / "posix_forward.c",
         "startup": PORT / "p9_newlib_start.c",
         "boot": PORT / "newlib_stdio_probe.c",
         "child": PORT / "newlib_exit_child.c",
@@ -112,7 +113,7 @@ def main():
                 "-Wl,-z,noexecstack", "-Wl,--gc-sections",
                 "-Wl,--build-id=none", "-o", str(elf),
                 str(startup), str(objects["startup"]), str(objects[program]),
-                str(objects["syscalls"]), str(stubs),
+                str(objects["syscalls"]), str(objects["posix"]), str(stubs),
                 "-Wl,--start-group", str(libc), str(libm),
                 "-lgcc", "-Wl,--end-group",
             ]
@@ -120,7 +121,7 @@ def main():
                 raise AssertionError("Plan9 legacy libc must NOT be linked")
             run(link, log)
             required = ["_start", "p9_start", "_read", "_write", "_sbrk",
-                        "_exit", "malloc", "free", "_impure_ptr"]
+                        "_exit", "read", "write", "sbrk", "malloc", "free", "_impure_ptr"]
             if kind == "boot":
                 required += ["printf", "snprintf", "strtol", "sin"]
             audits.append(audit(elf, build, required))

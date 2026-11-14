@@ -88,6 +88,14 @@ static void check_uxpipe(void)
     for(i=0;i<3;++i)
         check(uxpipe_format((UxPipeData *)maps[2*i],
                             (UxPipeAck *)maps[2*i+1])==0, "format UXPIPE");
+    /* This self-contained legacy probe has no separate peer process:
+     * explicitly simulate peer mappings for the new UXPIPE startup
+     * rendezvous. The real delegated-child CI test below is authoritative
+     * for cross-process readiness and capability attenuation.
+     */
+    __atomic_store_n(&((UxPipeData *)maps[0])->ready,1,__ATOMIC_RELEASE);
+    __atomic_store_n(&((UxPipeAck *)maps[3])->ready,1,__ATOMIC_RELEASE);
+    __atomic_store_n(&((UxPipeAck *)maps[5])->ready,1,__ATOMIC_RELEASE);
     /* Simulate an already-published stdin + explicit producer EOF. */
     memcpy(((UxPipeData *)maps[0])->payload,payload,sizeof(payload));
     __atomic_store_n(&((UxPipeData *)maps[0])->produced,

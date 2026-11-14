@@ -64,6 +64,14 @@ int p2001_session_probe(void)
     }
     /* Exactly TWO or FOUR attenuated SPAWN UXPIPE grants. Never
      * mistake these for a native console or a volume capability. */
+    /* The pre-existing ls fixture inherits a read-only listing image and a
+     * write-only one-shot output frame. It is NOT a UXPIPE pair. Preserve
+     * that intentionally separate transport without granting authority.
+     */
+    if(found==2 && rights[0]==Vread && rights[1]==Vwrite) {
+        probe_state=-1;
+        return 0;
+    }
     if(found==2 || found==4) {
         for(i=0;i<found;++i) {
             unsigned int required = found==2

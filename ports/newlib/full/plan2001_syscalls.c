@@ -4,9 +4,10 @@
  * generated user syscall stubs from rt_stubs.o. Newlib supplies errno,
  * strings, malloc and stdio. This target is single-threaded.
  *
- * fd 0: explicit authorized, RO capability-region input ring.
- * fd 1,2: native authorized console objects, not inherited POSIX fds.
- * Other descriptors/paths deliberately return EBADF or ENOSYS.
+ * fd 0/1/2: supervisor-delegated UXPIPE descriptor view when bound.
+ * Standalone boot probes retain opt-in region stdin and native console I/O.
+ * fd 3+: trusted userland UXFS file-service descriptors when attached.
+ * No path, raw OID or integer Unix fd confers a kernel capability.
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -19,6 +20,7 @@
 #include <sys/types.h>
 #include "obj.h"
 #include "sysctl.h"
+#include "vobj.h"
 #include "../../unix/uxpipe.h"
 #include "../../unix/uxfd.h"
 
@@ -155,7 +157,8 @@ int p9_full_bind_uxpipe(const int handles[6])
 {
     unsigned i;
     if(!handles) { errno = EINVAL; return -1; }
-    if(proxy_bound || read_base || console_closed[0] || console_closed[1]) {
+    if(proxy_bound || read_base || console_closed[0] || console_closed[1] ||
+       console_handles[0] >= 0 || console_handles[1] >= 0) {
         errno = EBUSY; return -1;
     }
     for(i = 0; i < 6; ++i) {
@@ -177,6 +180,57 @@ int p9_full_bind_uxpipe(const int handles[6])
     return 0;
 denied:
     p9_full_unbind_uxpipe();
+    errno = EACCES;
+    return -1;
+}
+
+/* Import ONLY the exact stream capabilities delegated by the trusted
+ * Unix supervisor. SYSCTL reveals the calling process's own Handle table,
+ * never another process's capabilities. Slot order is supervisor's explicit
+ * Oinheritv contract, not a search for arbitrary writable regions.
+ *
+ * Six RO/RW regions plus one execute-only volume are expected. The volume
+ * is launch authority only; it is never used for stdio or file I/O.
+ * An incomplete or excessive grant list fails closed, without falling back
+ * to ObjOpenConsole or another inherited region.
+ */
+int p9_full_bind_inherited_uxpipe(void)
+{
+    VobjListRec records[16];
+    SysctlReq req;
+    static const unsigned rights[6] = {
+        Vread, Vwrite, Vwrite, Vread, Vwrite, Vread
+    };
+    int handles[6];
+    unsigned streams = 0, executable_volumes = 0, i;
+    long n;
+    memset(&req, 0, sizeof req);
+    req.version = SYSCTL_ABI_VERSION;
+    req.data = records;
+    req.datalen = sizeof records;
+    if(sysctl(SysctlScopeOwnProcess, SysctlHandleList,
+              &req, sizeof req) < 0 ||
+       req.result < 0 || req.result > 16 ||
+       req.aux != (unsigned long long)req.result) {
+        errno = EACCES;
+        return -1;
+    }
+    n = (long)req.result;
+    for(i = 0; i < (unsigned)n; ++i) {
+        const VobjListRec *r = &records[i];
+        if(r->kind == VkindRegion) {
+            if(streams == 6 || r->rights != rights[streams] ||
+               r->handle == 0) goto denied;
+            handles[streams++] = (int)r->handle;
+        } else if(r->kind == VkindGeVolume && r->rights == Vexecute) {
+            if(++executable_volumes != 1) goto denied;
+        } else {
+            goto denied;
+        }
+    }
+    if(streams != 6 || executable_volumes != 1) goto denied;
+    return p9_full_bind_uxpipe(handles);
+denied:
     errno = EACCES;
     return -1;
 }

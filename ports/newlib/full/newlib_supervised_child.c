@@ -39,8 +39,8 @@ int main(int argc, char **argv)
     if(argc != 2 || !argv || strcmp(argv[0], "unix-child") != 0 ||
        !argv[1] || argv[1][0] != '0')
         return 1;
-    if(p9_full_bind_inherited_uxpipe() != 0)
-        return 2; /* Fail closed: no direct console or guessed Handle. */
+    /* p9_start already bound the verified inherited grants before main.
+     * A missing binding makes the following FIFO checks fail closed. */
     if(fstat(0, &st) != 0 || !S_ISFIFO(st.st_mode))
         return failure("stdin fstat");
     if(fstat(1, &st) != 0 || !S_ISFIFO(st.st_mode))

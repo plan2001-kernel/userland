@@ -1,0 +1,148 @@
+name: Newlib real libc and native Plan2001 runtime
+
+on:
+  push:
+    branches: [experiment/newlib-ci]
+    paths:
+      - '.github/workflows/newlib-libc.yml'
+      - 'ports/newlib/**'
+      - 'tools/ci/build_newlib_libc.sh'
+      - 'tools/ci/newlib_full_*.py'
+      - 'tools/ci/seed_busybox_spawn.py'
+      - 'tools/ci/guest_libgloss_exit.sh'
+      - 'tools/ci/seed_busybox_spawn.py'
+      - 'tools/ci/guest_libgloss_exit.sh'
+      - 'tools/ci/newlib_full_*.sh'
+  pull_request:
+    paths:
+      - '.github/workflows/newlib-libc.yml'
+      - 'ports/newlib/**'
+      - 'tools/ci/build_newlib_libc.sh'
+      - 'tools/ci/newlib_full_*.py'
+      - 'tools/ci/newlib_full_*.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-newlib:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Newlib build tools and native Plan2001 QEMU dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc-14 g++-14 binutils clang lld make git \
+            autoconf automake libtool texinfo flex bison \
+            python3 curl file mtools ovmf qemu-system-x86
+
+      - name: Build real upstream Newlib 4.6.0 libc.a/libm.a
+        run: |
+          bash tools/ci/build_newlib_libc.sh \
+            "$RUNNER_TEMP/newlib-pinned" "$RUNNER_TEMP/newlib-reports"
+
+      - name: Fetch exact pinned Plan2001 kernel sources
+        run: |
+          python3 tools/ci/fetch_sources.py \
+            --lock config/sources.json \
+            --dest "$RUNNER_TEMP/plan2001-sources" \
+            --reports "$RUNNER_TEMP/newlib-reports"
+
+      - name: Build Plan2001 AMD64 kernel and UEFI loader for real QEMU
+        env:
+          CC: gcc-14
+        working-directory: ${{ runner.temp }}/plan2001-sources/kernel
+        run: |
+          tools/build-gcc.sh --kernel -j 4
+          tools/build-efi-gcc.sh -j 4
+
+      - name: Build native syscall stubs, MicroPython and GE/O tools
+        env:
+          CC: gcc-14
+        working-directory: ${{ runner.temp }}/plan2001-sources/kernel
+        run: |
+          tools/build-mpy-gcc.sh -j 4
+          tools/build.sh
+
+      - name: Link true upstream Newlib libc without Plan2001 libc-user.a
+        run: |
+          python3 tools/ci/newlib_full_link.py \
+            --kernel "$RUNNER_TEMP/plan2001-sources/kernel" \
+            --reports "$RUNNER_TEMP/newlib-reports" --cc gcc-14
+
+      - name: Boot actual full-Newlib stdio, heap, math and stdin test
+        run: |
+          bash tools/ci/newlib_full_guest.sh \
+            "$RUNNER_TEMP/plan2001-sources/kernel" \
+            "$RUNNER_TEMP/newlib-reports/newlib-target/newlib-boot.elf" \
+            "$RUNNER_TEMP/newlib-reports"
+
+      - name: Seed native MicroPython and Newlib exit child into fresh GE/O
+        run: |
+          python3 tools/ci/seed_busybox_spawn.py \
+            --kernel "$RUNNER_TEMP/plan2001-sources/kernel" \
+            --elf "$RUNNER_TEMP/newlib-reports/newlib-target/newlib-exit.elf" \
+            --init tests/guest/libgloss_exit_init.py \
+            --reports "$RUNNER_TEMP/newlib-reports" \
+            --image "$RUNNER_TEMP/newlib-reports/newlib-exit.img"
+
+      - name: Verify actual Newlib exit(0) and exit(7) via Process Handles
+        run: |
+          bash tools/ci/guest_libgloss_exit.sh \
+            "$RUNNER_TEMP/plan2001-sources/kernel" \
+            "$RUNNER_TEMP/newlib-reports/newlib-exit.img" \
+            "$RUNNER_TEMP/newlib-reports"
+
+      - name: Report results
+        if: always()
+        run: |
+          {
+            echo '# Full Newlib libc.a port'
+            if [ -f "$RUNNER_TEMP/newlib-reports/newlib-full-build.md" ]; then
+              cat "$RUNNER_TEMP/newlib-reports/newlib-full-build.md"
+            else
+              echo 'Full Newlib build: **NOT COMPLETED**'
+              if [ -f "$RUNNER_TEMP/newlib-reports/newlib-full-build.log" ]; then
+                echo 'Consult attached configure/make log'
+              fi
+            fi
+            for n in newlib-target-build.md newlib-full-guest.md libgloss-exit.md; do
+              if [ -f "$RUNNER_TEMP/newlib-reports/$n" ]; then
+                cat "$RUNNER_TEMP/newlib-reports/$n"
+              else
+                echo "$n: **NOT COMPLETED**"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Newlib archives, provenance and build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newlib-full-libc-amd64
+          path: |
+            ${{ runner.temp }}/newlib-reports/newlib-full-build.log
+            ${{ runner.temp }}/newlib-reports/newlib-full-build.md
+            ${{ runner.temp }}/newlib-reports/newlib-full/libc.a
+            ${{ runner.temp }}/newlib-reports/newlib-full/libm.a
+            ${{ runner.temp }}/newlib-reports/newlib-full/*.members
+            ${{ runner.temp }}/newlib-reports/newlib-full/SHA256SUMS
+            ${{ runner.temp }}/newlib-reports/newlib-target/*.elf
+            ${{ runner.temp }}/newlib-reports/newlib-target/*.json
+            ${{ runner.temp }}/newlib-reports/newlib-target/*.txt
+            ${{ runner.temp }}/newlib-reports/newlib-target-build.md
+            ${{ runner.temp }}/newlib-reports/newlib-target-build.log
+            ${{ runner.temp }}/newlib-reports/newlib-full-guest.md
+            ${{ runner.temp }}/newlib-reports/libgloss-exit.md
+            ${{ runner.temp }}/newlib-reports/qemu-newlib-full/*.log
+            ${{ runner.temp }}/newlib-reports/qemu-newlib-full/*.json
+            ${{ runner.temp }}/newlib-reports/qemu-libgloss-exit/*.log
+            ${{ runner.temp }}/newlib-reports/qemu-libgloss-exit/*.json
+            ${{ runner.temp }}/newlib-reports/busybox-spawn-seed.log
+            ${{ runner.temp }}/newlib-reports/busybox-spawn-seed.json
+          if-no-files-found: warn
+          retention-days: 14

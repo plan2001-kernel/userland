@@ -17,7 +17,7 @@ class ManifestTest(unittest.TestCase):
                          fnv1a(data[:-8]))
         for slot, directory in enumerate(BOOT_DIRS):
             offset = 16 + slot * 272
-            self.assertEqual(data[offset:offset+256].split(b"\\0", 1)[0],
+            self.assertEqual(data[offset:offset+256].split(b"\0", 1)[0],
                              directory.encode())
             self.assertEqual(struct.unpack_from("<QII", data, offset+256), (0, 0, 1))
         broken = bytearray(data)

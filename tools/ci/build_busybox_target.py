@@ -57,7 +57,7 @@ def check_elf(elf: Path, reports: Path, title: str) -> dict:
     if len(loads) != 2:
         raise RuntimeError(f"{title}: expected two PT_LOAD, found {len(loads)}")
     for sym in ("_start", "p9_start", "plan2001_busybox_dispatch",
-                "true_main", "false_main", "echo_main", "full_write",
+                "true_main", "false_main", "echo_main", "p2001_ls_main", "full_write",
                 "obj_write"):
         if not re.search(rf"(?m)^[0-9a-f]+\s+[Tt]\s+{re.escape(sym)}$", nm):
             raise RuntimeError(f"{title}: missing symbol {sym}")

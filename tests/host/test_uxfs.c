@@ -14,6 +14,8 @@ typedef struct {
     MockObject committed[MOCK_OBJECTS], pending[MOCK_OBJECTS];
     unsigned int count, commits;
     int denied;
+    UxOid unreadable;
+    int reject_commit;
 } MockDisk;
 static MockDisk disk;
 static Pvd view;
@@ -44,7 +46,7 @@ static int get(void *ctx, UxOid oid, void *data,
     unsigned int i = (unsigned int)(oid-100);
     if (!oid || i >= MOCK_OBJECTS ||
         d->committed[i].oid != oid || d->committed[i].n > capacity ||
-        d->denied) return -1;
+        (d->denied || oid == d->unreadable)) return -1;
     *size = d->committed[i].n;
     memcpy(data, d->committed[i].data, *size);
     return 0;
@@ -53,7 +55,7 @@ static int commit(void *ctx)
 {
     MockDisk *d = ctx;
     unsigned int i;
-    if (d->denied) return -1;
+    if (d->denied || d->reject_commit) return -1;
     for (i = 0; i < MOCK_OBJECTS; ++i)
         if (d->pending[i].oid) d->committed[i] = d->pending[i];
     ++d->commits;
@@ -77,6 +79,8 @@ int main(void)
     unsigned char bytes[UXFS_DATA_MAX];
     unsigned int n;
     char path[PVD_PATH_MAX];
+    unsigned char oversized[UXFS_DATA_MAX+1];
+    UxOid previous_oid;
 
     assert(pvd_bootstrap(&view) == 0);
     uxfs_init(&fs, &view);
@@ -84,6 +88,9 @@ int main(void)
     assert(strcmp(path,"/usr")==0);
     assert(uxfs_path(&fs,"../../../../../",path)==0);
     assert(strcmp(path,"/")==0);
+    memset(oversized, 'z', sizeof(oversized));
+    assert(uxfs_write(&fs,"/tmp/oversize",oversized,sizeof(oversized),0)==PVD_ENOSPC);
+    assert(uxfs_read(&fs,"/tmp/oversize",bytes,sizeof(bytes),&n)==PVD_ENOENT);
     assert(uxfs_mkdir(&fs, "/home/notes") == 0);
     assert(uxfs_mkdir(&fs, "/home/notes") == PVD_EEXIST);
     assert(uxfs_write(&fs, "/home/notes/a", "alpha", 5, 0) == 0);
@@ -101,10 +108,22 @@ int main(void)
      */
     assert(create(&disk, &((UxOid){0})) == 0);
     assert(uxfs_save(&fs, &store, 101) == 0);
-    assert(disk.commits == 1);
+    assert(disk.commits == 1 && !fs.dirty);
+    previous_oid = fs.nodes[11].oid;
     disk.denied = 1;
-    assert(uxfs_save(&fs, &store, 101) == PVD_EIO);
+    assert(uxfs_save(&fs, &store, 101) == PVD_OK);
+    assert(disk.commits == 1); /* clean save is a no-op */
     disk.denied = 0;
+    assert(uxfs_write(&fs, "/home/notes/c", "changed", 7, 0) == 0);
+    assert(fs.dirty);
+    disk.reject_commit = 1;
+    assert(uxfs_save(&fs, &store, 101) == PVD_EIO);
+    disk.reject_commit = 0;
+    assert(fs.dirty);
+    assert(uxfs_read(&fs, "/home/notes/c", bytes, sizeof(bytes), &n)==0);
+    assert(n==7 && memcmp(bytes,"changed",n)==0);
+    /* File identity must still be that of the prior committed snapshot. */
+    assert(fs.nodes[11].oid == previous_oid);
 
     /* Cold restart loses fs RAM but reuses the same committed GE/O mock. */
     assert(pvd_bootstrap(&view)==0);
@@ -114,6 +133,13 @@ int main(void)
     assert(uxfs_read(&fs,"/home/notes/c",bytes,sizeof(bytes),&n)==0);
     assert(n==9 && memcmp(bytes,"alphabeta",n)==0);
     assert(pvd_chdir(&view,"/home/notes")==0);
+    disk.unreadable = previous_oid;
+    assert(uxfs_restore(&fs,&store,101)==PVD_EIO);
+    assert(pvd_getcwd(&view,path,sizeof(path))==PVD_OK);
+    assert(strcmp(path,"/home/notes")==0);
+    assert(uxfs_read(&fs, "c",bytes,sizeof(bytes),&n)==0);
+    assert(n==9 && memcmp(bytes,"alphabeta",n)==0);
+    disk.unreadable = 0;
     used=0;
     assert(uxfs_list(&fs,".",emit,0)==0);
     assert(strcmp(listing,"c\n")==0);

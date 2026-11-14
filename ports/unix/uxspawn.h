@@ -11,7 +11,7 @@ typedef struct {
 typedef struct {
     int executable_volume;      /* Vexecute-authorized GE/O volume Handle */
     unsigned long long oid;     /* executable identity, not authority */
-    UxGrant grant[3];           /* stdin, stdout, stderr region grants */
+    UxGrant grant[8];           /* capability-bound grants, max native Oinheritv */
     unsigned int grant_count;
 } UxLaunch;
 int uxspawn_start(const UxLaunch *launch, char **argv, int argc);

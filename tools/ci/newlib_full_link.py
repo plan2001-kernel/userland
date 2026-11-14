@@ -120,10 +120,11 @@ def main():
             if any("libc-user.a" in arg for arg in link):
                 raise AssertionError("Plan9 legacy libc must NOT be linked")
             run(link, log)
-            required = ["_start", "p9_start", "_read", "_write", "_sbrk",
-                        "_exit", "read", "write", "sbrk", "malloc", "free", "_impure_ptr"]
+            required = ["_start", "p9_start", "main", "_exit", "exit"]
             if kind == "boot":
-                required += ["printf", "snprintf", "strtol", "sin"]
+                required += ["_read", "_write", "_sbrk", "read", "write",
+                             "sbrk", "malloc", "free", "_impure_ptr",
+                             "printf", "snprintf", "strtol", "sin"]
             audits.append(audit(elf, build, required))
         (build / "result.json").write_text(
             json.dumps({

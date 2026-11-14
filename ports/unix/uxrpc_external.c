@@ -34,7 +34,7 @@ int uxrpc_external_run(UxService *service,int volume,UxOid oid,
     UxRpcServer server;
     int h[4]={-1,-1,-1,-1},process=-1,exited_ok=0,status=-1;
     unsigned long long maps[4]={0,0,0,0};
-    char *args[4]={"uxrpc-client",0,0,0};
+    char *args[5]={"uxrpc-client",0,0,0,0};
     unsigned int i;
     if(!service || !service->fs.view || volume<=0 || !oid || !argv ||
        !output || !size || !capacity || argc<3 || argc>4 ||

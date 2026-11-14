@@ -7,6 +7,7 @@
 #include "../unix/init.h"
 #include "f5_shell.h"
 #include "../unix/supervisor.h"
+#include "../unix/uxrpc_child.h"
 #include "vobj.h"
 #include "obj.h"
 #endif
@@ -74,6 +75,9 @@ int main(int argc, char **argv)
      * applet request do NOT require F5 console grants: the child gets its
      * own attenuated RO listing and RW stdout regions from its launcher.
      */
+    if (argc >= 1 && argv && argv[0] &&
+        strcmp(argv[0],"uxrpc-client")==0)
+        return p2001_uxrpc_child_main(argc,argv);
     if (argc >= 2 && argv && argv[0] &&
         strcmp(argv[0],"busybox")==0)
     {

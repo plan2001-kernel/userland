@@ -4,9 +4,10 @@
  */
 #ifndef PLAN2001_UXEXTERNAL_H
 #define PLAN2001_UXEXTERNAL_H
-#include "uxfs.h"
+#include "uxservice.h"
 typedef struct {
     UxFs *fs;
+    UxService *service;         /* shared authoritative UXFS/GE-O owner */
     int executable_volume;          /* authorized Vexecute GE/O Handle */
     UxOid executable_oid;           /* identity only */
 } UxExternal;

@@ -9,8 +9,27 @@
 #include "../unix/uxgeo.h"
 #include "../unix/uxservice.h"
 #include "../unix/uxexternal.h"
+#include "../unix/uxrpc_external.h"
 
 extern int plan2001_busybox_dispatch(int argc, char **argv);
+
+static int equal(const char *a,const char *b)
+{
+    while(*a && *a==*b) {++a;++b;}
+    return *a==*b;
+}
+static int shell_external(void *context,const char *command,
+                          char *const *argv,unsigned int argc,
+                          void *output,unsigned int capacity,
+                          unsigned int *size)
+{
+    UxExternal *e=(UxExternal *)context;
+    if(equal(command,"uxfile"))
+        return uxrpc_external_run(e->service,e->executable_volume,
+                                  e->executable_oid,argv,argc,
+                                  output,capacity,size);
+    return uxexternal_ls(context,command,argv,argc,output,capacity,size);
+}
 
 static int write_bytes(const char *bytes, size_t length)
 {
@@ -91,10 +110,11 @@ int p2001_f5_shell(Pvd *view, void *context)
         }
         if (storage->executable_volume) {
             external.fs = fs;
+            external.service = &service;
             external.executable_volume = storage->executable_volume;
             external.executable_oid = storage->executable_oid;
             io.context = &external;
-            io.external = uxexternal_ls;
+            io.external = shell_external;
             io.external_ls = 1;
             io.pipeline = uxexternal_pipeline;
         }

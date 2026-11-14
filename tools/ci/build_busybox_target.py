@@ -98,7 +98,7 @@ def main() -> None:
     linker = args.kernel / "micropython/gcc/user.ld"
     originals = [args.busybox / path for path in APPLETS.values()]
     inputs = [archive, linker, PORT / "libbb.h", PORT / "compat.c", PORT / "session.c",
-              PORT / "main.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
+              PORT / "main.c", PORT / "ls_child.c", PORT / "pvd_cli.c", PORT / "pvd_cli.h",
               PORT / "f5_shell.c", PORT / "f5_shell.h",
               UNIX / "pvd.c", UNIX / "pvd.h", UNIX / "init.c",
               UNIX / "init.h", UNIX / "uxfs.c", UNIX / "uxfs.h",
@@ -134,7 +134,8 @@ def main() -> None:
         "linux_host_libc_used_for_target": False,
         "qemu_result": "NOT ASSESSED by build script"}
     try:
-        for name, source in {**APPLETS, "compat": str(PORT / "compat.c"),
+        for name, source in {**APPLETS, "ls_child": str(PORT / "ls_child.c"),
+                             "compat": str(PORT / "compat.c"),
                              "session": str(PORT / "session.c")}.items():
             path = (args.busybox / source if name in APPLETS else Path(source))
             obj = build / f"{name}.o"

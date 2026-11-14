@@ -234,6 +234,37 @@ denied:
     return -1;
 }
 
+/* The standard Newlib process startup calls this before main() or any
+ * application stdio. Zero inherited region Handles means standalone native
+ * execution (the original console probe/exit tests still use native I/O).
+ * Any nonzero region grant set MUST satisfy the complete, attenuated
+ * supervisor contract; a two-region legacy frame is not a Unix stream.
+ */
+int p9_full_auto_bind_uxpipe(void)
+{
+    VobjListRec records[16];
+    SysctlReq req;
+    unsigned i;
+    long n;
+    memset(&req, 0, sizeof req);
+    req.version = SYSCTL_ABI_VERSION;
+    req.data = records;
+    req.datalen = sizeof records;
+    if(sysctl(SysctlScopeOwnProcess, SysctlHandleList,
+              &req, sizeof req) < 0 ||
+       req.result < 0 || req.result > 16 ||
+       req.aux != (unsigned long long)req.result) {
+        errno = EACCES;
+        return -1;
+    }
+    n = (long)req.result;
+    for(i = 0; i < (unsigned)n; ++i) {
+        if(records[i].kind == VkindRegion)
+            return p9_full_bind_inherited_uxpipe() == 0 ? 1 : -1;
+    }
+    return 0; /* no delegated stream: preserve standalone Newlib mode */
+}
+
 int p9_full_bind_stdin(int region_handle)
 {
     long mapped;

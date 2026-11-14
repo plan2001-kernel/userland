@@ -115,6 +115,10 @@ def main() -> None:
               UNIX / "uxspawn.c", UNIX / "uxspawn.h",
               UNIX / "uxexternal.c", UNIX / "uxexternal.h",
               UNIX / "uxpipe.c", UNIX / "uxpipe.h",
+              UNIX / "uxrpc.c", UNIX / "uxrpc.h",
+              UNIX / "uxrpc_external.c", UNIX / "uxrpc_external.h",
+              UNIX / "uxrpc_child.c", UNIX / "uxrpc_child.h",
+              UNIX / "uxfd.c", UNIX / "uxfd.h",
               runtime / "rt_startup.o",
               runtime / "rt_start.o", runtime / "rt_stubs.o",
               runtime / "rt_misc.o", runtime / "libm_frexp.o",
@@ -166,6 +170,10 @@ def main() -> None:
                              ("uxservice", UNIX / "uxservice.c"),
                              ("uxspawn", UNIX / "uxspawn.c"),
                              ("uxexternal", UNIX / "uxexternal.c"),
+                             ("uxrpc", UNIX / "uxrpc.c"),
+                             ("uxrpc_external", UNIX / "uxrpc_external.c"),
+                             ("uxrpc_child", UNIX / "uxrpc_child.c"),
+                             ("uxfd", UNIX / "uxfd.c"),
                              ("supervisor", UNIX / "supervisor.c")):
             obj = build / f"{name}.o"
             logged(common + ["-c", str(source), "-o", str(obj)], log)

@@ -199,6 +199,7 @@ const char *pvd_error(int code)
 {
     switch (code) {
     case PVD_ENOENT: return "no such directory";
+    case PVD_EACCES: return "permission denied";
     case PVD_EIO: return "output failed";
     case PVD_EEXIST: return "already exists";
     case PVD_EINVAL: return "invalid path";

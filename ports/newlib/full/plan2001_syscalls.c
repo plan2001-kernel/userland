@@ -115,6 +115,7 @@ static int translate_fs(int code)
 {
     switch(code) {
     case PVD_ENOENT: return ENOENT;
+    case PVD_EACCES: return EACCES;
     case PVD_EIO: return EIO;
     case PVD_EEXIST: return EEXIST;
     case PVD_ENAMETOOLONG: return ENAMETOOLONG;

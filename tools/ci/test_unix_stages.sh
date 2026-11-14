@@ -64,6 +64,13 @@ case "$STAGE" in
       "$ROOT/ports/unix/uxfd.c" -o "$OUT/uxservice"
     "$OUT/uxservice"
     "$CC" "${BASE[@]}" -pthread \
+      "$ROOT/tests/host/test_uxrpc.c" \
+      "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
+      "$ROOT/ports/unix/uxshell.c" "$ROOT/ports/unix/uxservice.c" \
+      "$ROOT/ports/unix/uxfd.c" "$ROOT/ports/unix/uxpipe.c" \
+      "$ROOT/ports/unix/uxrpc.c" -o "$OUT/uxrpc"
+    timeout 30 "$OUT/uxrpc"
+    "$CC" "${BASE[@]}" -pthread \
       "$ROOT/tests/host/test_uxpipe.c" "$ROOT/ports/unix/uxpipe.c" \
       -o "$OUT/uxpipe"
     timeout 20 "$OUT/uxpipe"

@@ -167,7 +167,7 @@ try:
         # quietly using the in-process fallback. Both use the same seeded
         # child ELF OID, but separate kernel Process Handles.
         spawns = re.findall(
-            r"o: SPAWN pid=[^\\n]* oid=0x4f45584543000006",
+            r"o: SPAWN pid=\d+ handle=\d+ oid=0x4f45584543000006\b",
             serial.read_text(errors="replace"))
         assert len(spawns) >= 2, (
             "F5 ls did not execute as a second native SPAWN process: "

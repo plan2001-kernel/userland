@@ -15,7 +15,7 @@ from PIL import Image
 if len(sys.argv) not in (5, 6):
     raise SystemExit("usage: f5_console_accept.py MONITOR SERIAL SCREENS FONT [initial|reboot]")
 mode = sys.argv[5] if len(sys.argv) == 6 else "initial"
-if mode not in ("initial", "reboot"):
+if mode not in ("initial", "reboot", "persist-initial", "persist-reboot"):
     raise SystemExit("invalid boot phase")
 monitor, serial, out, fontfile = map(Path, sys.argv[1:5])
 out.mkdir(parents=True, exist_ok=True)
@@ -134,7 +134,18 @@ try:
     assert "PLAN2001-BUSYBOX-F5-READY" in ready
     assert "unix:/$" in ready, "F5 did not open at the Unix root prompt"
 
-    if mode == "reboot":
+    if mode == "persist-reboot":
+        enter("cat /tmp/persisted")
+        waitscreen("geo-restored-cat", "\\nGEOPERSIST2026\\nunix:/$")
+        enter("ls /tmp")
+        waitscreen("geo-restored-list", "persisted")
+        print("PASS: real GE/O manifest and file restored across fresh QEMU boot")
+    elif mode == "persist-initial":
+        enter("echo GEOPERSIST2026 > /tmp/persisted")
+        enter("cat /tmp/persisted")
+        waitscreen("geo-firstboot-cat", "\\nGEOPERSIST2026\\nunix:/$")
+        print("PASS: real GE/O file committed via delegated storage grant")
+    elif mode == "reboot":
         # This is a second cold QEMU process with the SAME GE/O disk image.
         # The previous boot ended in /usr/bin; RAM-only cwd must reset.
         assert "unix:/usr/bin$" not in ready, "previous boot's cwd leaked"

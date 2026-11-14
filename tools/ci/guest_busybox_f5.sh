@@ -53,7 +53,7 @@ required=true
 [process.unixInitF5]
 source=geo:PARTUUID=$puuid:OID=0x4f45584543000005
 owner=unixSupervisorF5
-args=0x4f45584543000006
+args=0x4f45584543000006${UX_GEO_PERSIST:+ 0x4f45584543000007}
 required=true
 EOF
 qob_make_esp "$OUT/plan9.ini" "$OUT/esp.img"
@@ -82,7 +82,7 @@ for phase in initial reboot; do
 
   timeout 240 python3 "$ROOT/tools/ci/f5_console_accept.py" \
     "$mon" "$serial" "$OUT/screens/$phase" \
-    "$KERNEL/kernel/core/fbconsolefont.h" "$phase"
+    "$KERNEL/kernel/core/fbconsolefont.h" "${UX_GEO_PERSIST:+persist-}$phase"
   qob_cleanup
 done
 

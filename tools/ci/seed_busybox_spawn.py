@@ -27,6 +27,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--kernel", required=True, type=Path)
     parser.add_argument("--elf", required=True, type=Path)
+    parser.add_argument("--unix-manifest", action="store_true",
+                        help="provision a checked UXFS manifest on the new scratch volume")
     parser.add_argument("--extra-elf", type=Path,
                         help="additional checked native F5 child at OID 0x...06")
     parser.add_argument("--init", required=True, type=Path)
@@ -81,6 +83,9 @@ def main():
                     (seed / "exe").write_bytes(args.extra_elf.read_bytes())
                     (seed / "exeoid").write_text(f"{UNIX_CHILD_OID:016x}",
                                                  encoding="ascii")
+            if command[0] == str(formatter) and args.unix_manifest:
+                from seed_unix_manifest import provision
+                provision(seed)
             stream.write("$ " + " ".join(command) + "\n")
             stream.flush()
             run = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT)
@@ -95,6 +100,9 @@ def main():
     verified = [(MPY_OID, mp.read_bytes()), (BUSYBOX_OID, args.elf.read_bytes())]
     if args.extra_elf:
         verified.append((UNIX_CHILD_OID, args.extra_elf.read_bytes()))
+    if args.unix_manifest:
+        from seed_unix_manifest import MANIFEST_OID, initial_manifest
+        verified.append((MANIFEST_OID, initial_manifest()))
     for oid, data in verified:
         found = info["objects"].get(f"{oid:016x}")
         if not found or found["sha256"] != sha(data) or found["bytes"] != len(data):

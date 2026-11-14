@@ -6,6 +6,7 @@
 #include "libbb.h"
 #include "obj.h"
 #include "vobj.h"
+#include "../unix/uxpipe.h"
 
 extern long obj_list(void *, unsigned long long);
 extern long obj_region_map(int, unsigned long long);
@@ -16,6 +17,8 @@ extern long region_wake(unsigned long long, unsigned long long,
                         unsigned long long);
 
 static int probe_state;                 /* 0 unprobed, 1 session, -1 absent, -2 broken */
+static int proxy_state;                 /* 1: six explicitly delegated UXPIPE regions */
+static UxPipe proxy_in, proxy_out, proxy_err;
 static unsigned long long inbase, outbase, diagbase;
 static unsigned long long inlast;
 static unsigned char inbuf[OBJ_RING_DATA];
@@ -43,73 +46,76 @@ static int ring_valid(unsigned long long base)
 int p2001_session_probe(void)
 {
     VobjListRec handles[32];
-    long count, i;
-    int inh = -1, outh = -1, diagh = -1;
-    long ib = -1, ob = -1, db = -1;
-
+    int regions[6];
+    unsigned int rights[6];
+    long mapped[6] = {-1,-1,-1,-1,-1,-1};
+    long n, i, found=0;
     if (probe_state)
-        return probe_state == 1 ? 1 : probe_state == -1 ? 0 : -1;
-    count = obj_list(handles, 32);
-    if (count < 0 || count > 32) {
-        probe_state = -2;
-        return -1;
+        return probe_state==1 ? 1 : probe_state==-1 ? 0 : -1;
+    n=obj_list(handles,32);
+    if (n<0 || n>32) goto broken;
+    for(i=0;i<n;++i) {
+        if (handles[i].kind!=VkindRegion) continue;
+        if (found>=6) goto broken;
+        regions[found]=(int)handles[i].handle;
+        rights[found]=handles[i].rights;
+        ++found;
     }
-    for (i = 0; i < count; ++i) {
-        if (handles[i].kind != VkindRegion)
-            continue;
-        if ((handles[i].rights & Vwrite) != 0) {
-            if (outh < 0)
-                outh = (int)handles[i].handle;
-            else if (diagh < 0)
-                diagh = (int)handles[i].handle;
-            else
-                goto broken;
-        } else if ((handles[i].rights & Vread) != 0) {
-            if (inh >= 0)
-                goto broken;
-            inh = (int)handles[i].handle;
+    if (found==6) {
+        /* Only these six process-local grants form a proxy console.
+         * Extra GE/O volume Handles are classified separately by Unix init.
+         * No raw volume OID supplies console authority.
+         */
+        for (i=0;i<6;++i) {
+            unsigned int required =
+                i==0 || i==3 || i==5 ? Vread : Vwrite;
+            if (rights[i]!=required) goto broken;
+            mapped[i]=obj_region_map(regions[i],0);
+            if (mapped[i]<0) goto broken;
         }
+        if (uxpipe_bind(&proxy_in,
+                        (UxPipeData *)mapped[0],(UxPipeAck *)mapped[1],
+                        (unsigned long long)mapped[0],
+                        (unsigned long long)mapped[1],UXPIPE_READER)!=0 ||
+            uxpipe_bind(&proxy_out,
+                        (UxPipeData *)mapped[2],(UxPipeAck *)mapped[3],
+                        (unsigned long long)mapped[2],
+                        (unsigned long long)mapped[3],UXPIPE_WRITER)!=0 ||
+            uxpipe_bind(&proxy_err,
+                        (UxPipeData *)mapped[4],(UxPipeAck *)mapped[5],
+                        (unsigned long long)mapped[4],
+                        (unsigned long long)mapped[5],UXPIPE_WRITER)!=0)
+            goto broken;
+        proxy_state=1;
+        probe_state=1;
+        return 1;
     }
-    /* Native SPAWN fixtures may receive one RO file-view region and
-     * one RW output region. Neither is a kernel console session. The
-     * exact three-grant session contract is mandatory for console access.
-     */
-    if (diagh < 0) {
-        probe_state = -1;
+    if (found<3) {
+        probe_state=-1; /* non-console SPAWN children */
         return 0;
     }
-    if (inh < 0 || outh < 0 || diagh < 0)
+    if (found!=3 ||
+        rights[0]!=(Vread|Vmeta) ||
+        rights[1]!=(Vwrite|Vmeta) ||
+        rights[2]!=(Vwrite|Vmeta))
         goto broken;
-
-    ib = obj_region_map(inh, 0);
-    if (ib < 0)
-        goto broken;
-    ob = obj_region_map(outh, 0);
-    if (ob < 0)
-        goto broken;
-    db = obj_region_map(diagh, 0);
-    if (db < 0)
-        goto broken;
-    if (!ring_valid((unsigned long long)ib) ||
-        !ring_valid((unsigned long long)ob) ||
-        !ring_valid((unsigned long long)db))
-        goto broken;
-    inbase = (unsigned long long)ib;
-    outbase = (unsigned long long)ob;
-    diagbase = (unsigned long long)db;
-    inlast = acquire(&((ObjRingHeader *)inbase)->write_seq);
-    inpos = inlen = 0;
-    probe_state = 1;
+    for(i=0;i<3;++i) {
+        mapped[i]=obj_region_map(regions[i],0);
+        if (mapped[i]<0 || !ring_valid((unsigned long long)mapped[i]))
+            goto broken;
+    }
+    inbase=(unsigned long long)mapped[0];
+    outbase=(unsigned long long)mapped[1];
+    diagbase=(unsigned long long)mapped[2];
+    inlast=acquire(&((ObjRingHeader *)inbase)->write_seq);
+    inpos=inlen=0;
+    probe_state=1;
     return 1;
-
 broken:
-    if (db >= 0)
-        (void)obj_region_unmap((unsigned long long)db);
-    if (ob >= 0)
-        (void)obj_region_unmap((unsigned long long)ob);
-    if (ib >= 0)
-        (void)obj_region_unmap((unsigned long long)ib);
-    probe_state = -2;
+    for(i=0;i<6;++i)
+        if (mapped[i]>=0)
+            (void)obj_region_unmap((unsigned long long)mapped[i]);
+    probe_state=-2;
     return -1;
 }
 
@@ -126,6 +132,9 @@ ssize_t p2001_session_write(int fd, const void *buf, size_t count)
 
     if (p2001_session_probe() != 1 || (fd != 1 && fd != 2))
         return -1;
+    if (proxy_state)
+        return (ssize_t)uxpipe_write(fd==1 ? &proxy_out : &proxy_err,
+                                     buf,(unsigned int)count,-1);
     base = fd == 1 ? outbase : diagbase;
     h = (ObjRingHeader *)base;
     while (done < count) {
@@ -156,55 +165,62 @@ ssize_t p2001_session_write(int fd, const void *buf, size_t count)
 
 /* Raw console byte input, not yet POSIX canonical/termios semantics.
  * Avoid consuming unpublished or overwritten slots. */
-ssize_t p2001_session_read(int fd, void *buf, size_t count)
+/* Nonblocking poll of the original kernel input ring. The supervisor
+ * needs multiplexed console input/output without owning a kernel Pipe.
+ * Ordinary direct F5 reads retain the blocking helper below.
+ */
+ssize_t p2001_session_try_read(int fd, void *buf, size_t count)
 {
     ObjRingHeader *h;
     unsigned long long seq, off;
     unsigned int len;
-    long status;
-    unsigned char *p = (unsigned char *)buf;
+    unsigned char *p=(unsigned char *)buf;
     size_t n;
-
-    if (fd != 0 || p2001_session_probe() != 1)
-        return -1;
-    if (!count)
-        return 0;
-    h = (ObjRingHeader *)inbase;
-    for (;;) {
-        if (inpos < inlen) {
-            n = count < (size_t)(inlen - inpos) ?
-                count : (size_t)(inlen - inpos);
-            for (size_t j=0; j<n; ++j)
-                p[j] = inbuf[inpos+j];
-            inpos += (unsigned int)n;
-            return (ssize_t)n;
-        }
-        seq = acquire(&h->write_seq);
-        if (seq - inlast > OBJ_RING_SLOTS)
-            inlast = seq - OBJ_RING_SLOTS;
-        while (inlast < seq) {
-            ++inlast;
-            off = OBJ_RING_HEADER +
-                  ((inlast-1) % OBJ_RING_SLOTS) * OBJ_RING_SLOT;
-            if (acquire((unsigned long long *)(inbase+off)) != 2*inlast)
-                continue;
-            len = *(volatile unsigned int *)(inbase+off+8);
-            if (len == 0 || len > OBJ_RING_DATA)
-                continue;
-            for (unsigned int j=0; j<len; ++j)
-                inbuf[j] = *(volatile unsigned char *)(inbase+off+16+j);
-            if (acquire((unsigned long long *)(inbase+off)) != 2*inlast)
-                continue;
-            inpos = 0;
-            inlen = len;
-            break;
-        }
-        if (inpos < inlen)
+    if (fd!=0 || p2001_session_probe()!=1 || proxy_state ||
+        (!buf && count)) return -1;
+    if (!count) return 0;
+    h=(ObjRingHeader *)inbase;
+    if (inpos<inlen) {
+        n=count < (size_t)(inlen-inpos) ? count : (size_t)(inlen-inpos);
+        for(size_t j=0;j<n;++j) p[j]=inbuf[inpos+j];
+        inpos+=(unsigned int)n;
+        return (ssize_t)n;
+    }
+    seq=acquire(&h->write_seq);
+    if (seq-inlast>OBJ_RING_SLOTS) inlast=seq-OBJ_RING_SLOTS;
+    while(inlast<seq) {
+        ++inlast;
+        off=OBJ_RING_HEADER+((inlast-1)%OBJ_RING_SLOTS)*OBJ_RING_SLOT;
+        if (acquire((unsigned long long *)(inbase+off))!=2*inlast)
             continue;
-        status = region_wait(inbase, OBJ_RING_PUBOFF, inlast, -1);
-        if (status == 3)
-            return 0;
-        if (status < 0)
-            return -1;
+        len=*(volatile unsigned int *)(inbase+off+8);
+        if (!len || len>OBJ_RING_DATA) continue;
+        for(unsigned int j=0;j<len;++j)
+            inbuf[j]=*(volatile unsigned char *)(inbase+off+16+j);
+        if(acquire((unsigned long long *)(inbase+off))!=2*inlast)
+            continue;
+        inpos=0; inlen=len;
+        break;
+    }
+    if(inpos==inlen) return 0;
+    n=count<(size_t)(inlen-inpos)?count:(size_t)(inlen-inpos);
+    for(size_t j=0;j<n;++j)p[j]=inbuf[inpos+j];
+    inpos+=(unsigned int)n;
+    return (ssize_t)n;
+}
+ssize_t p2001_session_read(int fd, void *buf, size_t count)
+{
+    long n, rc;
+    if(fd!=0 || p2001_session_probe()!=1 || (!buf && count))
+        return -1;
+    if (proxy_state)
+        return (ssize_t)uxpipe_read(&proxy_in,buf,(unsigned int)count,-1);
+    if(!count) return 0;
+    for (;;) {
+        n=p2001_session_try_read(fd,buf,count);
+        if(n!=0) return (ssize_t)n;
+        rc=region_wait(inbase,OBJ_RING_PUBOFF,inlast,-1);
+        if(rc==3) return 0;
+        if(rc<0) return -1;
     }
 }

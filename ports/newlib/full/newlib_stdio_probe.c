@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include "obj.h"
 #include "plan2001_full.h"
 
@@ -40,6 +41,8 @@ int main(int argc, char **argv)
     double v;
     long value;
     struct stat st;
+    struct timeval before, after;
+    long long elapsed_us;
     (void)argc; (void)argv;
     errno = 0;
     check(_read(0, tmp, 1) == -1 && errno == EBADF,
@@ -68,6 +71,16 @@ int main(int argc, char **argv)
     v = sin(theta);
     check(v > 0.479 && v < 0.480, "Newlib libm sin");
     printf("PLAN2001-NEWLIB-FULL-LIBM-PASS\n");
+    fflush(stdout);
+
+    check(gettimeofday(&before, NULL) == 0, "native gettimeofday start");
+    check(sleep(1) == 0, "POSIX sleep(1) must succeed");
+    check(gettimeofday(&after, NULL) == 0, "native gettimeofday end");
+    elapsed_us = ((long long)after.tv_sec - (long long)before.tv_sec)*1000000LL +
+        ((long long)after.tv_usec - (long long)before.tv_usec);
+    check(elapsed_us >= 500000LL, "sleep(1) must not mean 1 millisecond");
+    check(elapsed_us < 20000000LL, "sleep(1) unexpectedly too long");
+    printf("PLAN2001-NEWLIB-FULL-TIME-PASS\n");
     fflush(stdout);
 
     check(_fstat(1, &st) == 0 && S_ISCHR(st.st_mode), "native stdout fstat");
@@ -108,5 +121,5 @@ int main(int argc, char **argv)
     printf("PLAN2001-NEWLIB-FULL-PASS\n");
     fflush(stdout);
     for(;;)
-        (void)sleep(1000);
+        (void)sleep(1);
 }

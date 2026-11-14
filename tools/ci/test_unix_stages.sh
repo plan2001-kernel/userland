@@ -36,7 +36,7 @@ case "$STAGE" in
       "$ROOT/tests/host/test_uxexternal.c" \
       "$ROOT/ports/unix/pvd.c" "$ROOT/ports/unix/uxfs.c" \
       "$ROOT/ports/unix/uxexternal.c" "$ROOT/ports/unix/uxspawn.c" \
-      -o "$OUT/uxexternal"
+      "$ROOT/ports/unix/uxpipe.c" -o "$OUT/uxexternal"
     "$OUT/uxexternal"
     "$CC" -std=gnu11 -m64 -O2 -ffreestanding -nostdinc -fno-builtin \
       -Wall -Wextra -Werror -I"$KERNEL/runtime/abi" \

@@ -78,7 +78,10 @@ int main(int argc, char **argv)
         strcmp(argv[0],"busybox")==0)
     {
         int applet_status=plan2001_busybox_dispatch(argc,argv);
-        p2001_session_finish();
+        /* Legacy ls uses two region *frames* in the inverse grant
+         * direction. Do not probe it as UXPIPE, or contaminate its exit. */
+        if(strcmp(argv[1],"echo")==0 || strcmp(argv[1],"cat")==0)
+            p2001_session_finish();
         return applet_status;
     }
     static Pvd view;

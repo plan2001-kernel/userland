@@ -9,6 +9,14 @@
 #include "obj.h"
 #include "vobj.h"
 #include "uxexternal.h"
+/* The real kernel already supplies WAIT/WAKE. Host tests never execute
+ * a real pipeline, but UXPIPE is linked to validate the service boundary. */
+long region_wait(unsigned long long b,unsigned long long o,
+                 unsigned long long e,long long t)
+{ (void)b; (void)o; (void)e; (void)t; return -1; }
+long region_wake(unsigned long long b,unsigned long long o,
+                 unsigned long long n)
+{ (void)b; (void)o; (void)n; return 0; }
 static Pvd pvd;
 static UxFs fs;
 static UxExternal external;

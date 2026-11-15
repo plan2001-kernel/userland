@@ -146,11 +146,16 @@ jobs:
           git -C "$RUNNER_TEMP/busybox" checkout --detach -q FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/busybox" rev-parse HEAD)" = "$BUSYBOX_SHA"
       - name: Link genuine upstream BusyBox ash with Newlib and audit ELF
+        shell: bash
         run: |
-          python3 tools/ci/build_ash.py \
+          if ! python3 tools/ci/build_ash.py \
             --kernel "$RUNNER_TEMP/kernel" \
             --busybox "$RUNNER_TEMP/busybox" \
-            --reports "$RUNNER_TEMP/newlib-reports"
+            --reports "$RUNNER_TEMP/newlib-reports"; then
+            echo '=== Upstream ash compiler/linker diagnostics ===' >&2
+            tail -n 160 "$RUNNER_TEMP/newlib-reports/ash-native/build.log" >&2 || true
+            exit 1
+          fi
       - name: Build trusted F5 supervisor executable
         run: |
           python3 tools/ci/build_busybox_target.py \
@@ -199,6 +204,7 @@ jobs:
             ${{ runner.temp }}/newlib-reports/newlib-target/*.json
             ${{ runner.temp }}/newlib-reports/newlib-target/*.txt
             ${{ runner.temp }}/newlib-reports/ash-native/*.json
+            ${{ runner.temp }}/newlib-reports/ash-native/build.log
             ${{ runner.temp }}/newlib-reports/qemu-busybox-f5/*.log
             ${{ runner.temp }}/newlib-reports/qemu-busybox-f5/screens/**/*.txt
             ${{ runner.temp }}/newlib-reports/qemu-newlib-full/*.log

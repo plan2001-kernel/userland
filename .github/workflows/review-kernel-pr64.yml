@@ -13,6 +13,36 @@ env:
   REVIEW_KERNEL_SHA: c2714daeea31e6d658192946f5d7c890eaf7984f
 
 jobs:
+  controller-selection:
+    name: AHCI controller selection is actually passed to QEMU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert ash QEMU controller switch is wired to command line
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path("tools/ci/guest_busybox_f5.sh").read_text()
+          start = src.find('  "$QOB_QEMU" -name')
+          assert start >= 0, "QEMU invocation not found"
+          end = src.find("\n  QOB_CURRENT_PID=", start)
+          assert end > start, "QEMU invocation boundary not found"
+          invocation = src[start:end]
+          expected = '"${disk_device[@]}"'
+          assert expected in invocation, (
+              "AHCI review blocker: UX_HW_CONTROLLER is parsed, but the "
+              "disk_device array is not passed to QEMU; both modes boot virtio"
+          )
+          print("PASS: controller selection is present in QEMU invocation")
+          PY
+      - name: Explain known hardware validation limitation
+        if: always()
+        run: |
+          echo 'The as-is PR #14 QEMU launcher ignores its AHCI disk_device array.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This gate is expected to fail until the runner genuinely boots with an emulated AHCI controller.' >> "$GITHUB_STEP_SUMMARY"
+
   host-contracts:
     name: Host Unix/PVD/UXPIPE/Newlib descriptor contracts (kernel PR64)
     runs-on: ubuntu-24.04
@@ -105,6 +135,45 @@ jobs:
             "$RUNNER_TEMP/kernel" \
             "$RUNNER_TEMP/newlib-reports/newlib-target/newlib-process.elf" \
             "$RUNNER_TEMP/newlib-reports" process
+      - name: Fetch pinned upstream BusyBox 1.36.1 for full ash build
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUSYBOX_SHA=$(python3 -c 'import json; print(json.load(open("config/sources.json"))["busybox"]["commit"])')
+          git init -q "$RUNNER_TEMP/busybox"
+          git -C "$RUNNER_TEMP/busybox" remote add origin https://github.com/mirror/busybox.git
+          git -C "$RUNNER_TEMP/busybox" fetch --depth=1 --no-tags origin "$BUSYBOX_SHA"
+          git -C "$RUNNER_TEMP/busybox" checkout --detach -q FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/busybox" rev-parse HEAD)" = "$BUSYBOX_SHA"
+      - name: Link genuine upstream BusyBox ash with Newlib and audit ELF
+        run: |
+          python3 tools/ci/build_ash.py \
+            --kernel "$RUNNER_TEMP/kernel" \
+            --busybox "$RUNNER_TEMP/busybox" \
+            --reports "$RUNNER_TEMP/newlib-reports"
+      - name: Build trusted F5 supervisor executable
+        run: |
+          python3 tools/ci/build_busybox_target.py \
+            --kernel "$RUNNER_TEMP/kernel" \
+            --busybox "$RUNNER_TEMP/busybox" \
+            --reports "$RUNNER_TEMP/newlib-reports" --cc gcc-14
+      - name: Seed GE/O with actual ash and trusted supervisor
+        run: |
+          python3 tools/ci/seed_busybox_spawn.py \
+            --kernel "$RUNNER_TEMP/kernel" \
+            --elf "$RUNNER_TEMP/newlib-reports/busybox-target/unix-supervisor-f5-plan2001.elf" \
+            --extra-elf "$RUNNER_TEMP/newlib-reports/ash-native/ash.elf" \
+            --init tests/guest/busybox_spawn_init.py \
+            --image "$RUNNER_TEMP/newlib-reports/ash-o.img" \
+            --reports "$RUNNER_TEMP/newlib-reports"
+      - name: Real QEMU keyboard/VGA acceptance for upstream ash on virtio
+        env:
+          UX_HW_CONTROLLER: virtio
+        run: |
+          bash tools/ci/guest_busybox_f5.sh \
+            "$RUNNER_TEMP/kernel" \
+            "$RUNNER_TEMP/newlib-reports/ash-o.img" \
+            "$RUNNER_TEMP/newlib-reports" ash
       - name: Summarize native evidence and limitations
         if: always()
         shell: bash
@@ -117,6 +186,7 @@ jobs:
               echo "NOT COMPLETED: $f" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
+          echo 'Full upstream ash real QEMU acceptance: see corresponding step; AHCI selection is blocked by separate static controller gate.' >> "$GITHUB_STEP_SUMMARY"
           echo 'NOT RUN: physical hardware, ARM64, full BusyBox applet distribution, concurrent persistent Unix file service.' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload reproducible QEMU evidence (without disk images)
         if: always()
@@ -128,6 +198,9 @@ jobs:
             ${{ runner.temp }}/newlib-reports/*.log
             ${{ runner.temp }}/newlib-reports/newlib-target/*.json
             ${{ runner.temp }}/newlib-reports/newlib-target/*.txt
+            ${{ runner.temp }}/newlib-reports/ash-native/*.json
+            ${{ runner.temp }}/newlib-reports/qemu-busybox-f5/*.log
+            ${{ runner.temp }}/newlib-reports/qemu-busybox-f5/screens/**/*.txt
             ${{ runner.temp }}/newlib-reports/qemu-newlib-full/*.log
             ${{ runner.temp }}/newlib-reports/qemu-newlib-full/*.json
           if-no-files-found: warn

@@ -68,7 +68,28 @@ their actual OIDs. Installation paths are not used by the native measurement.
 The executable is a native ELF launched from the trusted boot MicroPython
 console, not an ash executable requiring the Unix admission catalog.
 
-In a native mpy REPL (for example Win+F2), substitute the installed OIDs:
+For a one-command operator setup, generate and install the REPL initializer:
+
+```sh
+python3 tools/geobench/make_repl_init.py EXECUTABLE_OID RESULT_OID geobench-repl.py
+```
+
+Install that source as a framed object using otar, then configure only the
+intended MicroPython boot session with `args=--repl-init=SOURCE_OID`. This
+requires the native interpreter's explicit REPL initializer support (see the
+kernel's `docs/MPY-REPL.md`). It defines the command without running a benchmark
+at boot. The operator then types only:
+
+```python
+geobench()
+```
+
+`geobench(True)` runs only the functional smoke workload. The helper observes
+child completion, prints the saved CSV and closes its temporary capabilities.
+The actual measured work remains entirely in the libc-free native ELF.
+
+For manual launch from an unconfigured native mpy REPL, substitute the OIDs:
+
 
 ```python
 import plan9 as p, space

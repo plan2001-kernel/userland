@@ -4,7 +4,8 @@ import csv
 from pathlib import Path
 import statistics
 import sys
-PHASES={'large_create':(1,1048576),'large_replace_commit':(8,8388608),'large_read_warm':(8,8388608),'small_create_commit':(32,131072),'small_read_warm':(32,131072),'small_replace_commit':(32,131072),'small_replace_batch':(32,131072)}
+LARGE=1048576-128
+PHASES={'large_create':(1,LARGE),'large_replace_commit':(8,LARGE*8),'large_read_warm':(8,LARGE*8),'small_create_commit':(32,131072),'small_read_warm':(32,131072),'small_replace_commit':(32,131072),'small_replace_batch':(32,131072)}
 def load(path):
     text=Path(path).read_text()
     if '# PASS direct whole-object workload; rounds=3;' not in text:raise ValueError('incomplete, smoke, or different-round result')

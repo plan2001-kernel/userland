@@ -29,9 +29,9 @@ Three rounds, seven phases:
 
 | Phase | Workload | Native completion |
 |---|---|---|
-| large_create | One complete 1 MiB object | CREATE's implicit commit |
-| large_replace_commit | Eight changed 1 MiB values, same OID | PUT + COMMIT per value |
-| large_read_warm | Eight whole 1 MiB reads | No commit |
+| large_create | One 1 MiB-minus-128-byte payload, plus framing | CREATE's implicit commit |
+| large_replace_commit | Eight changed large values, same OID | PUT + COMMIT per value |
+| large_read_warm | Eight whole large-object reads | No commit |
 | small_create_commit | 32 complete 4 KiB objects | CREATE's implicit commit per object |
 | small_read_warm | One whole read of each small object | No commit |
 | small_replace_commit | Change all 32 small objects | PUT + COMMIT per object |
@@ -71,7 +71,7 @@ console, not an ash executable requiring the Unix admission catalog.
 For a one-command operator setup, generate and install the REPL initializer:
 
 ```sh
-python3 tools/geobench/make_repl_init.py EXECUTABLE_OID RESULT_OID geobench-repl.py
+python3 tools/geobench/make_repl_init.py 0x24d 0x24b geobench-repl.py
 ```
 
 Install that source as a framed object using otar, then configure only the
@@ -88,14 +88,16 @@ geobench()
 child completion, prints the saved CSV and closes its temporary capabilities.
 The actual measured work remains entirely in the libc-free native ELF.
 
-For manual launch from an unconfigured native mpy REPL, substitute the OIDs:
+For manual launch from an unconfigured native mpy REPL on the current p5
+layout, use these installed OIDs (the configured F2 console already supplies
+them; simply type `geobench()` there):
 
 
 ```python
 import plan9 as p, space
 v = p.obj_open_volume()
-r = p.obj_open_ge_oid(v, RESULT_OID)
-h = space.spawn(EXECUTABLE_OID, handle=v, argv=('geobench',), vhandles=(v, r))
+r = p.obj_open_ge_oid(v, 0x24b)
+h = space.spawn(0x24d, handle=v, argv=('geobench',), vhandles=(v, r))
 p.process_wait(h, -1)
 p.obj_close(h)
 p.obj_close(r)

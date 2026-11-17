@@ -2,7 +2,8 @@
 typedef unsigned long long U64;
 typedef unsigned int U32;
 typedef struct {long handle;U64 oid;} GBObject;
-#define GB_LARGE (1024u*1024u)
+/* Native object calls cap the complete payload, including CBOR and footer, at 1 MiB. */
+#define GB_LARGE (1024u*1024u-128u)
 #define GB_SMALL 4096u
 #define GB_COUNT 32u
 #define GB_PASSES 8u

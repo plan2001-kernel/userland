@@ -24,6 +24,7 @@ class DirectBenchmarkTests(unittest.TestCase):
         rows=list(csv.DictReader(x for x in r.stdout.splitlines() if not x.startswith('#')))
         self.assertEqual(len(rows),7 if smoke else 21)
         self.assertTrue(all(int(x['elapsed_ns'])>0 for x in rows))
+        self.assertTrue(all(int(x['stored_bytes'])//int(x['operations'])<=1024*1024 for x in rows))
         self.assertIn('# PASS direct whole-object workload;',r.stdout)
         return destination,r.stdout,rows
     def test_native_has_no_unix_or_libc_link_dependencies(self):

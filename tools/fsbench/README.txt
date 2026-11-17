@@ -1,8 +1,10 @@
-FSBENCH v1: Linux ext4 versus Plan2001 GE/O on the same physical machine
+FSBENCH v1: Unix-adapter benchmark (not direct GE/O throughput)
 
 Purpose
 -------
 A small end-to-end Unix file API benchmark, not a crash/recovery test.
+Use tools/geobench for direct native GE/O whole-object measurements without
+the Unix adapter. Do not mix its geobench_v1 results with fsbench_v1 results.
 Run Linux on the normal /home ext4 partition, then boot Plan2001 on the
 same computer and run the preinstalled /home/fsbench from the F5 ash shell.
 Do not use QEMU timings for the comparison. Keep the machine otherwise idle,
